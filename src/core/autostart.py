@@ -71,6 +71,7 @@ Icon={icon_path}
 Terminal=false
 Type=Application
 Categories=Development;Utility;
+StartupWMClass=dev-status-widget
 X-GNOME-Autostart-enabled=true
 StartupNotify=false
 """

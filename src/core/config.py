@@ -70,7 +70,7 @@ class ConfigManager:
                 jira_url=str(data.get("jira_url") or "").strip(),
                 jira_email=str(data.get("jira_email") or "").strip(),
                 jira_api_token=str(data.get("jira_api_token") or "").strip(),
-                jira_jql=str(data.get("jira_jql") or "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC").strip(),
+                jira_jql=str(data.get("jira_jql") or "sprint in openSprints() AND (assignee = currentUser() OR assignee is EMPTY) ORDER BY updated DESC").strip(),
                 autostart=bool(data.get("autostart", False))
             )
         except Exception as e:

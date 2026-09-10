@@ -85,6 +85,11 @@ class JiraTaskItem:
     created_at: datetime
     updated_at: datetime
     html_url: str
+    assignee_avatar: str = ""
+    parent_key: Optional[str] = None
+    parent_summary: Optional[str] = None
+    parent_status: Optional[str] = None
+    parent_issue_type: Optional[str] = None
 
     @property
     def updated_humanized(self) -> str:
@@ -128,7 +133,7 @@ class AppConfig:
     jira_url: str = ""
     jira_email: str = ""
     jira_api_token: str = ""
-    jira_jql: str = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC"
+    jira_jql: str = "sprint in openSprints() AND (assignee = currentUser() OR assignee is EMPTY) ORDER BY updated DESC"
 
     # Inicialização Automática no Sistema (Debian/Linux)
     autostart: bool = False

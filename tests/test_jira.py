@@ -93,6 +93,49 @@ class TestJiraProvider(unittest.TestCase):
         self.assertEqual(item.priority, "High")
         self.assertEqual(item.html_url, "https://minhaempresa.atlassian.net/browse/PROJ-10")
 
+        # Verifica que o endpoint chamado foi /rest/api/3/search/jql
+        args, kwargs = mock_get.call_args
+        self.assertEqual(args[0], "https://minhaempresa.atlassian.net/rest/api/3/search/jql")
+
+    @patch("requests.get")
+    def test_api_fetch_fallback(self, mock_get):
+        resp_404 = MagicMock()
+        resp_404.status_code = 404
+
+        resp_200 = MagicMock()
+        resp_200.status_code = 200
+        resp_200.json.return_value = {
+            "issues": [
+                {
+                    "key": "SRV-20",
+                    "fields": {
+                        "summary": "Jira Server issue",
+                        "status": {"name": "Open"},
+                        "priority": {"name": "Low"},
+                        "issuetype": {"name": "Task"},
+                        "assignee": {"displayName": "Admin"},
+                        "created": "2024-03-01T10:00:00Z",
+                        "updated": "2024-03-02T15:30:00Z"
+                    }
+                }
+            ]
+        }
+
+        # Simula: primeiro endpoint (/jql) dá 404, fallback (/search v3) dá 200
+        mock_get.side_effect = [resp_404, resp_200]
+
+        provider = JiraProvider(
+            jira_url="https://jira-local.empresa.com",
+            email="dev@empresa.com",
+            api_token="token",
+            demo_mode=False
+        )
+
+        result = provider.fetch()
+        self.assertEqual(len(result["items"]), 1)
+        self.assertEqual(result["items"][0].key, "SRV-20")
+        self.assertEqual(mock_get.call_count, 2)
+
 
 class TestJiraConfigPersistence(unittest.TestCase):
     def test_save_and_load_jira_settings(self):

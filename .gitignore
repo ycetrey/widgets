@@ -15,7 +15,8 @@ build/
 # Configurações com dados sensíveis (tokens/senhas)
 config.yaml
 *.local.yaml
-tests_tmp_*.yaml
+*.db
+tests_tmp_*
 
 # Sistema operacional e IDE
 .DS_Store

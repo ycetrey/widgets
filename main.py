@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from PyQt6.QtCore import QTimer
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
 from src.core.config import ConfigManager
@@ -42,6 +43,7 @@ def main():
     app.setApplicationName("dev-status-widget")
     app.setApplicationDisplayName("Dev Status Widget")
     app.setOrganizationName("DevWidgets")
+    app.setDesktopFileName("dev-status-widget")
 
     # Garante que o app não encerre se a última janela for fechada enquanto a bandeja estiver ativa
     app.setQuitOnLastWindowClosed(False)
@@ -59,6 +61,15 @@ def main():
     # Caminho do ícone
     base_dir = Path(__file__).resolve().parent
     icon_path = str(base_dir / "assets" / "icon.png")
+    favicon_path = str(base_dir / "assets" / "favicon-32.png")
+
+    # Configura ícone da aplicação para GNOME Dock e janelas
+    app_icon = QIcon()
+    if os.path.exists(icon_path):
+        app_icon.addFile(icon_path)
+    if os.path.exists(favicon_path):
+        app_icon.addFile(favicon_path)
+    app.setWindowIcon(app_icon)
 
     # Provedor customizado se estiver no modo demo
     provider = None

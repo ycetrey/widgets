@@ -1,7 +1,8 @@
 """
-Visualização da aba de Tarefas do Jira.
+Visualização da aba de Tarefas do Jira com suporte a Quadro Kanban e Lista.
 """
-from typing import List, Optional
+from collections import defaultdict
+from typing import Dict, List, Optional
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import (
@@ -18,6 +19,7 @@ from PyQt6.QtWidgets import (
 
 from ...core.models import JiraTaskItem
 from ..widgets.jira_card import JiraCard
+from ..widgets.kanban_swimlane import KanbanSwimlane
 
 
 class JiraView(QWidget):
@@ -26,6 +28,7 @@ class JiraView(QWidget):
     def __init__(self, parent: QWidget = None):
         super().__init__(parent)
         self.all_tasks: List[JiraTaskItem] = []
+        self.view_mode = "kanban"  # "kanban" ou "list"
         self._init_ui()
 
     def _init_ui(self):
@@ -33,14 +36,30 @@ class JiraView(QWidget):
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
-        # 1. Barra de Filtros e Ações
+        # 1. Barra Superior de Filtros e Ações
         filter_frame = QFrame()
         filter_frame.setObjectName("filterBarFrame")
         filter_layout = QHBoxLayout(filter_frame)
         filter_layout.setContentsMargins(12, 10, 12, 10)
-        filter_layout.setSpacing(10)
+        filter_layout.setSpacing(8)
 
-        # Seletor de Status
+        # Alternador de visualização (Kanban vs Lista)
+        self.view_toggle_btn = QPushButton("📊 Kanban")
+        self.view_toggle_btn.setToolTip("Alternar entre modo Kanban e Lista simples")
+        self.view_toggle_btn.setProperty("class", "actionButton")
+        self.view_toggle_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.view_toggle_btn.clicked.connect(self._toggle_view_mode)
+        filter_layout.addWidget(self.view_toggle_btn)
+
+        # Filtro de Responsável
+        self.assignee_combo = QComboBox()
+        self.assignee_combo.addItem("👥 Todos", "all")
+        self.assignee_combo.addItem("👤 Só Minhas", "mine")
+        self.assignee_combo.addItem("❓ Não Atribuídas", "unassigned")
+        self.assignee_combo.currentIndexChanged.connect(self._apply_filters)
+        filter_layout.addWidget(self.assignee_combo)
+
+        # Filtro de Status
         self.status_combo = QComboBox()
         self.status_combo.addItem("Todos os Status", "all")
         self.status_combo.currentIndexChanged.connect(self._apply_filters)
@@ -48,7 +67,7 @@ class JiraView(QWidget):
 
         # Campo de busca rápida
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍 Filtrar tarefas por código, título...")
+        self.search_input.setPlaceholderText("🔍 Filtrar por código ou título...")
         self.search_input.textChanged.connect(self._apply_filters)
         filter_layout.addWidget(self.search_input, stretch=1)
 
@@ -74,23 +93,34 @@ class JiraView(QWidget):
         self.error_banner.hide()
         root_layout.addWidget(self.error_banner)
 
-        # 3. Área Rolável com a lista de tarefas
+        # 3. Área Rolável (Suporta scroll vertical e horizontal para as 5 colunas do Kanban)
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         self.cards_container = QWidget()
         self.cards_layout = QVBoxLayout(self.cards_container)
         self.cards_layout.setContentsMargins(14, 14, 14, 14)
-        self.cards_layout.setSpacing(10)
+        self.cards_layout.setSpacing(12)
         self.cards_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        self.empty_label = QLabel("Aguardando carregamento de tarefas do Jira...")
+        self.empty_label = QLabel("Aguardando carregamento de tarefas da Sprint do Jira...")
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_label.setStyleSheet("color: #6c7086; font-size: 14px; padding: 40px;")
         self.cards_layout.addWidget(self.empty_label)
 
         self.scroll_area.setWidget(self.cards_container)
         root_layout.addWidget(self.scroll_area, stretch=1)
+
+    def _toggle_view_mode(self):
+        if self.view_mode == "kanban":
+            self.view_mode = "list"
+            self.view_toggle_btn.setText("📋 Lista")
+        else:
+            self.view_mode = "kanban"
+            self.view_toggle_btn.setText("📊 Kanban")
+        self._apply_filters()
 
     def set_error_message(self, message: Optional[str]):
         if message:
@@ -109,7 +139,7 @@ class JiraView(QWidget):
     def update_tasks(self, tasks: List[JiraTaskItem]):
         self.all_tasks = tasks
 
-        # Atualiza o combo de status preservando seleção
+        # Atualiza opções do combo de status preservando seleção
         current_selection = self.status_combo.currentData()
         statuses = sorted(list(set(t.status for t in self.all_tasks)))
 
@@ -135,28 +165,92 @@ class JiraView(QWidget):
                 widget.deleteLater()
 
         selected_status = self.status_combo.currentData()
+        selected_assignee = self.assignee_combo.currentData()
         query = self.search_input.text().strip().lower()
 
         filtered = self.all_tasks
+
+        # Filtro de status
         if selected_status and selected_status != "all":
             filtered = [t for t in filtered if t.status == selected_status]
 
+        # Filtro de responsável
+        if selected_assignee == "mine":
+            filtered = [t for t in filtered if t.assignee.lower() not in ("não atribuído", "unassigned", "none", "?")]
+        elif selected_assignee == "unassigned":
+            filtered = [t for t in filtered if t.assignee.lower() in ("não atribuído", "unassigned", "none", "?")]
+
+        # Filtro textual por chave, resumo, tipo ou pai
         if query:
             filtered = [
                 t for t in filtered
                 if (query in t.key.lower() or
                     query in t.summary.lower() or
+                    query in (t.parent_key or "").lower() or
+                    query in (t.parent_summary or "").lower() or
                     query in t.issue_type.lower() or
                     query in t.priority.lower())
             ]
 
         if not filtered:
-            msg = "🎉 Nenhuma tarefa pendente no Jira!" if not self.all_tasks else "Nenhuma tarefa encontrada para os filtros aplicados."
+            msg = "🎉 Nenhuma tarefa pendente na sprint atual!" if not self.all_tasks else "Nenhuma tarefa encontrada para os filtros aplicados."
             lbl = QLabel(msg)
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lbl.setStyleSheet("color: #6c7086; font-size: 14px; padding: 40px;")
             self.cards_layout.addWidget(lbl)
+            return
+
+        if self.view_mode == "kanban":
+            self._render_kanban_view(filtered)
         else:
-            for task in filtered:
-                card = JiraCard(task)
-                self.cards_layout.addWidget(card)
+            self._render_list_view(filtered)
+
+    def _render_kanban_view(self, tasks: List[JiraTaskItem]):
+        # Agrupa tarefas por Pai / História (Swimlanes)
+        parents_map: Dict[str, List[JiraTaskItem]] = defaultdict(list)
+        parent_info: Dict[str, dict] = {}
+        standalone_tasks: List[JiraTaskItem] = []
+
+        for task in tasks:
+            if task.parent_key:
+                parents_map[task.parent_key].append(task)
+                if task.parent_key not in parent_info:
+                    parent_info[task.parent_key] = {
+                        "summary": task.parent_summary or "Tarefa Principal",
+                        "status": task.parent_status,
+                        "url": task.html_url.rsplit("/browse/", 1)[0] + f"/browse/{task.parent_key}" if "/browse/" in task.html_url else ""
+                    }
+            else:
+                standalone_tasks.append(task)
+
+        # Renderiza Swimlanes com Pai (ex: FF-464)
+        for pkey, subtasks in parents_map.items():
+            info = parent_info[pkey]
+            swimlane = KanbanSwimlane(
+                parent_key=pkey,
+                parent_summary=info["summary"],
+                parent_status=info["status"],
+                parent_url=info["url"],
+                tasks=subtasks,
+                total_subtasks=len(subtasks),
+                parent=self.cards_container
+            )
+            self.cards_layout.addWidget(swimlane)
+
+        # Renderiza tarefas avulsas / sem pai em swimlane dedicada
+        if standalone_tasks:
+            standalone_swimlane = KanbanSwimlane(
+                parent_key="",
+                parent_summary="Tarefas Individuais da Sprint (Sem Subtarefas)",
+                parent_status="Ativas",
+                parent_url="",
+                tasks=standalone_tasks,
+                total_subtasks=len(standalone_tasks),
+                parent=self.cards_container
+            )
+            self.cards_layout.addWidget(standalone_swimlane)
+
+    def _render_list_view(self, tasks: List[JiraTaskItem]):
+        for task in tasks:
+            card = JiraCard(task)
+            self.cards_layout.addWidget(card)

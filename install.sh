@@ -83,6 +83,7 @@ Terminal=false
 Type=Application
 Categories=Development;Utility;
 StartupNotify=true
+StartupWMClass=dev-status-widget
 EOF
 
 chmod +x "$DESKTOP_FILE"
@@ -108,6 +109,7 @@ Icon=$ICON_PATH
 Terminal=false
 Type=Application
 Categories=Development;Utility;
+StartupWMClass=dev-status-widget
 X-GNOME-Autostart-enabled=true
 StartupNotify=false
 EOF

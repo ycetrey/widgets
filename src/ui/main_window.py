@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ..core.config import ConfigManager
+from ..core.database import DatabaseManager
 from ..core.models import AppConfig
 from ..core.notifier import DesktopNotifier
 from ..providers.github_provider import GitHubProvider
@@ -31,14 +32,15 @@ from .widgets.tab_button import NavTabButton
 class FetchWorker(QObject):
     finished = pyqtSignal(dict)
 
-    def __init__(self, github_provider: GitHubProvider, jira_provider: JiraProvider = None):
+    def __init__(self, github_provider: GitHubProvider, jira_provider: JiraProvider = None, jira_enabled: bool = True):
         super().__init__()
         self.github_provider = github_provider
         self.jira_provider = jira_provider
+        self.jira_enabled = jira_enabled
 
     def run(self):
         pr_result = self.github_provider.fetch() if self.github_provider else {"items": [], "new_items": [], "errors": []}
-        jira_result = self.jira_provider.fetch() if self.jira_provider else {"items": [], "new_items": [], "errors": []}
+        jira_result = (self.jira_provider.fetch() if self.jira_enabled else {"items": [], "new_items": [], "errors": []}) if self.jira_provider else {"items": [], "new_items": [], "errors": []}
         self.finished.emit({
             "prs": pr_result,
             "jira": jira_result
@@ -75,6 +77,7 @@ class MainWindow(QMainWindow):
             )
 
         self.notifier = DesktopNotifier(icon_path=self.icon_path)
+        self.db = DatabaseManager()
 
         # Worker e Thread
         self.thread: QThread = None
@@ -94,13 +97,31 @@ class MainWindow(QMainWindow):
         self._setup_shortcuts()
         self._start_timer()
 
+        # Carrega dados do cache local SQLite imediatamente (carregamento instantâneo)
+        self._load_from_cache()
+
         # Dispara primeira busca imediatamente
         self.start_fetch()
 
+    def _load_from_cache(self):
+        try:
+            cached_prs = self.db.get_pull_requests()
+            if cached_prs:
+                self.prs_view.update_prs(cached_prs)
+                self.tab_prs.set_count(len(cached_prs))
+
+            if self.config.jira_enabled:
+                cached_jira = self.db.get_jira_tasks()
+                if cached_jira:
+                    self.jira_view.update_tasks(cached_jira)
+                    self.tab_jira.set_count(len(cached_jira))
+        except Exception as e:
+            print(f"[Database] Erro ao carregar dados do cache inicial: {e}")
+
     def _init_ui(self):
         self.setWindowTitle("Dev Status Widget - Monitor de PRs e Jira")
-        self.resize(780, 700)
-        self.setMinimumSize(560, 500)
+        self.resize(1180, 780)
+        self.setMinimumSize(680, 500)
 
         if os.path.exists(self.icon_path):
             self.setWindowIcon(QIcon(self.icon_path))
@@ -130,6 +151,7 @@ class MainWindow(QMainWindow):
         self.tab_jira = NavTabButton("📋 Jira Tarefas", count=0)
         self.tab_jira.set_active(False)
         self.tab_jira.clicked.connect(lambda: self._switch_tab(1))
+        self.tab_jira.setVisible(self.config.jira_enabled)
         tab_layout.addWidget(self.tab_jira)
 
         # Aba 2: Configurações
@@ -217,6 +239,10 @@ class MainWindow(QMainWindow):
                 jql=new_config.jira_jql
             )
 
+        self.tab_jira.setVisible(new_config.jira_enabled)
+        if not new_config.jira_enabled and self.stack.currentIndex() == 1:
+            self._switch_tab(0)
+
         self._start_timer()
         self.status_bar.showMessage("Configurações salvas com sucesso!", 4000)
         self.start_fetch()
@@ -240,7 +266,7 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage("Atualizando Pull Requests e Jira...")
 
         self.thread = QThread()
-        self.worker = FetchWorker(self.github_provider, self.jira_provider)
+        self.worker = FetchWorker(self.github_provider, self.jira_provider, jira_enabled=self.config.jira_enabled)
         self.worker.moveToThread(self.thread)
 
         self.thread.started.connect(self.worker.run)
@@ -283,20 +309,41 @@ class MainWindow(QMainWindow):
         else:
             self.jira_view.set_error_message(None)
 
-        # 3. Notificações desktop de novos itens
+        # Salva dados no banco local SQLite
+        if pr_items:
+            try:
+                self.db.save_pull_requests(pr_items)
+            except Exception as e:
+                print(f"[Database] Erro ao salvar PRs no SQLite: {e}")
+
+        if jira_items:
+            try:
+                self.db.save_jira_tasks(jira_items)
+            except Exception as e:
+                print(f"[Database] Erro ao salvar tarefas do Jira no SQLite: {e}")
+
+        # 3. Notificações desktop de novos itens persistidas no SQLite
         if self.config.notifications_enabled:
-            if pr_new:
-                self.notifier.notify_new_prs(pr_new)
-            if jira_new:
-                self.notifier.notify_new_jira_tasks(jira_new)
+            try:
+                db_pr_new = self.db.detect_and_record_new_prs(pr_items) if pr_items else []
+                db_jira_new = self.db.detect_and_record_new_jira(jira_items) if jira_items else []
+                if db_pr_new:
+                    self.notifier.notify_new_prs(db_pr_new)
+                if db_jira_new:
+                    self.notifier.notify_new_jira_tasks(db_jira_new)
+            except Exception as e:
+                print(f"[Database] Erro ao processar notificações no SQLite: {e}")
 
         # 4. Atualiza tooltip da bandeja
         pr_text = f"{len(pr_items)} PRs"
-        jira_text = f"{len(jira_items)} Tarefas Jira"
-        self.tray.setToolTip(f"Dev Status Widget - {pr_text} • {jira_text}")
-
         now_str = datetime.now().strftime("%H:%M:%S")
-        self.status_bar.showMessage(f"Atualizado às {now_str} • {pr_text} • {jira_text}")
+        if self.config.jira_enabled:
+            jira_text = f"{len(jira_items)} Tarefas Jira"
+            self.tray.setToolTip(f"Dev Status Widget - {pr_text} • {jira_text}")
+            self.status_bar.showMessage(f"Atualizado às {now_str} • {pr_text} • {jira_text}")
+        else:
+            self.tray.setToolTip(f"Dev Status Widget - {pr_text}")
+            self.status_bar.showMessage(f"Atualizado às {now_str} • {pr_text}")
 
     def toggle_window_visibility(self):
         if self.isVisible():

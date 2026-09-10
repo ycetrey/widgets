@@ -5,13 +5,14 @@ import os
 import shutil
 import subprocess
 from typing import List, Optional
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QSystemTrayIcon
 
 
 class DesktopNotifier:
     def __init__(self, tray_icon: Optional[QSystemTrayIcon] = None, icon_path: Optional[str] = None):
         self.tray_icon = tray_icon
-        self.icon_path = icon_path or ""
+        self.icon_path = os.path.abspath(icon_path) if icon_path else ""
         self._notify_send_available = shutil.which("notify-send") is not None
 
     def set_tray_icon(self, tray_icon: QSystemTrayIcon):
@@ -19,9 +20,9 @@ class DesktopNotifier:
 
     def notify(self, title: str, message: str, urgency: str = "normal"):
         """
-        Dispara uma notificação nativa para o usuário.
-        Tenta primeiro via notify-send (padrão em GNOME/Debian para centro de notificações),
-        e também via QSystemTrayIcon se disponível.
+        Dispara uma notificação nativa para o usuário com o ícone do aplicativo.
+        Tenta primeiro via notify-send (padrão GNOME/Debian com ícone oficial),
+        e usa QSystemTrayIcon com QIcon como fallback elegante.
         """
         sent_via_cmd = False
         if self._notify_send_available:
@@ -35,13 +36,14 @@ class DesktopNotifier:
             except Exception as e:
                 print(f"[Notifier] Erro ao chamar notify-send: {e}")
 
-        # Se não enviou pelo notify-send ou como complemento para a bandeja:
-        if self.tray_icon and self.tray_icon.isSystemTrayAvailable():
+        # Fallback para o QSystemTrayIcon com o ícone customizado se notify-send não estiver disponível
+        if not sent_via_cmd and self.tray_icon and self.tray_icon.isSystemTrayAvailable():
             try:
-                icon_type = QSystemTrayIcon.MessageIcon.Information
-                if urgency == "critical":
-                    icon_type = QSystemTrayIcon.MessageIcon.Warning
-                self.tray_icon.showMessage(title, message, icon_type, 6000)
+                if self.icon_path and os.path.exists(self.icon_path):
+                    icon_arg = QIcon(self.icon_path)
+                else:
+                    icon_arg = QSystemTrayIcon.MessageIcon.Information if urgency != "critical" else QSystemTrayIcon.MessageIcon.Warning
+                self.tray_icon.showMessage(title, message, icon_arg, 6000)
             except Exception as e:
                 print(f"[Notifier] Erro ao enviar mensagem pelo tray: {e}")
 

@@ -47,5 +47,5 @@ jira_email: "seu-email@empresa.com"
 # API Token gerado em: https://id.atlassian.com/manage-profile/security/api-tokens
 jira_api_token: ""
 
-# Consulta JQL para filtrar suas tarefas (padrão: tarefas não resolvidas atribuídas a você)
-jira_jql: "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC"
+# Consulta JQL para filtrar tarefas da sprint atual atribuídas a você ou não atribuídas
+jira_jql: "sprint in openSprints() AND (assignee = currentUser() OR assignee is EMPTY) ORDER BY updated DESC"

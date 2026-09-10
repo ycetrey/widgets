@@ -11,18 +11,20 @@ from .base import BaseStatusProvider
 
 
 class JiraProvider(BaseStatusProvider):
+    DEFAULT_JQL = "sprint in openSprints() AND (assignee = currentUser() OR assignee is EMPTY) ORDER BY updated DESC"
+
     def __init__(
         self,
         jira_url: str = "",
         email: str = "",
         api_token: str = "",
-        jql: str = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC",
+        jql: str = DEFAULT_JQL,
         demo_mode: bool = False
     ):
         self.jira_url = jira_url.strip().rstrip("/") if jira_url else ""
         self.email = email.strip() if email else ""
         self.api_token = api_token.strip() if api_token else ""
-        self.jql = jql.strip() if jql else "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC"
+        self.jql = jql.strip() if jql else self.DEFAULT_JQL
         self.demo_mode = demo_mode
         self._known_keys: Set[str] = set()
         self._is_first_run: bool = True
@@ -58,20 +60,25 @@ class JiraProvider(BaseStatusProvider):
         }
         auth = HTTPBasicAuth(self.email, self.api_token)
 
-        endpoint = f"{self.jira_url}/rest/api/3/search"
+        # Jira Cloud migrou a busca JQL para /rest/api/3/search/jql (CHANGE-2046)
+        # Endpoints antigos (/rest/api/3/search e /rest/api/2/search) retornam HTTP 410 Gone no Jira Cloud.
+        endpoint = f"{self.jira_url}/rest/api/3/search/jql"
         params = {
             "jql": self.jql,
-            "fields": "summary,status,priority,issuetype,assignee,created,updated",
-            "maxResults": 50
+            "fields": "summary,status,priority,issuetype,assignee,created,updated,parent",
+            "maxResults": 100
         }
 
         try:
             resp = requests.get(endpoint, headers=headers, auth=auth, params=params, timeout=12)
 
-            # Fallback para api v2 se v3 não estiver disponível
-            if resp.status_code == 404:
-                endpoint = f"{self.jira_url}/rest/api/2/search"
+            # Fallback para instâncias Jira Server / Data Center locais que ainda utilizam v3 ou v2
+            if resp.status_code in (404, 405):
+                endpoint = f"{self.jira_url}/rest/api/3/search"
                 resp = requests.get(endpoint, headers=headers, auth=auth, params=params, timeout=12)
+                if resp.status_code in (404, 410):
+                    endpoint = f"{self.jira_url}/rest/api/2/search"
+                    resp = requests.get(endpoint, headers=headers, auth=auth, params=params, timeout=12)
 
             if resp.status_code == 200:
                 data = resp.json()
@@ -79,11 +86,11 @@ class JiraProvider(BaseStatusProvider):
                 items: List[JiraTaskItem] = []
 
                 for issue in issues:
-                    fields = issue.get("fields", {})
+                    fields = issue.get("fields") or {}
                     key = issue.get("key", "JIRA-0")
-                    status_obj = fields.get("status", {})
+                    status_obj = fields.get("status") or {}
                     status_name = status_obj.get("name", "Desconhecido")
-                    status_cat = status_obj.get("statusCategory", {}).get("key", "new")
+                    status_cat = (status_obj.get("statusCategory") or {}).get("key", "new")
 
                     priority_obj = fields.get("priority") or {}
                     priority_name = priority_obj.get("name", "Normal")
@@ -92,7 +99,15 @@ class JiraProvider(BaseStatusProvider):
                     type_name = type_obj.get("name", "Tarefa")
 
                     assignee_obj = fields.get("assignee") or {}
-                    assignee_name = assignee_obj.get("displayName", "Eu")
+                    assignee_name = assignee_obj.get("displayName") or "Não atribuído"
+                    assignee_avatar = ((assignee_obj.get("avatarUrls") or {}).get("48x48")) or ""
+
+                    parent_obj = fields.get("parent") or {}
+                    parent_key = parent_obj.get("key")
+                    parent_fields = parent_obj.get("fields") or {}
+                    parent_summary = parent_fields.get("summary")
+                    parent_status = (parent_fields.get("status") or {}).get("name")
+                    parent_issue_type = (parent_fields.get("issuetype") or {}).get("name")
 
                     created_dt = self._parse_datetime(fields.get("created"))
                     updated_dt = self._parse_datetime(fields.get("updated"))
@@ -108,7 +123,12 @@ class JiraProvider(BaseStatusProvider):
                         assignee=assignee_name,
                         created_at=created_dt,
                         updated_at=updated_dt,
-                        html_url=html_url
+                        html_url=html_url,
+                        assignee_avatar=assignee_avatar,
+                        parent_key=parent_key,
+                        parent_summary=parent_summary,
+                        parent_status=parent_status,
+                        parent_issue_type=parent_issue_type
                     )
                     items.append(item)
 
@@ -136,11 +156,25 @@ class JiraProvider(BaseStatusProvider):
                     "new_items": [],
                     "errors": ["Jira: Credenciais inválidas (E-mail ou API Token incorretos)."]
                 }
-            elif resp.status_code == 400:
+            elif resp.status_code == 403:
                 return {
                     "items": [],
                     "new_items": [],
-                    "errors": ["Jira: Consulta JQL inválida. Verifique a sintaxe nas configurações."]
+                    "errors": ["Jira: Acesso negado. Verifique as permissões da conta ou token."]
+                }
+            elif resp.status_code == 400:
+                err_detail = ""
+                try:
+                    err_json = resp.json()
+                    msgs = err_json.get("errorMessages", [])
+                    if msgs:
+                        err_detail = f": {'; '.join(msgs)}"
+                except Exception:
+                    pass
+                return {
+                    "items": [],
+                    "new_items": [],
+                    "errors": [f"Jira: Consulta JQL inválida{err_detail}. Verifique a sintaxe nas configurações."]
                 }
             else:
                 return {
