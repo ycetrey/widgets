@@ -27,6 +27,9 @@ minimize_to_tray_on_close: true
 # Iniciar o aplicativo já minimizado na bandeja
 start_minimized: false
 
+# Iniciar automaticamente com o sistema no login (Debian / GNOME / Linux XDG Autostart)
+autostart: true
+
 # Tema escuro (true/false)
 dark_mode: true
 

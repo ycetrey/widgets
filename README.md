@@ -26,6 +26,9 @@ Um aplicativo/widget desktop leve e moderno para Linux Debian (GNOME) com navega
   - Clique com botão esquerdo para mostrar/ocultar a janela rapidamente.
   - Menu de contexto com botão direito: *Atualizar Agora*, *Configurações*, *Sair*.
   - Ao clicar no "X" (fechar) da janela, o widget minimiza para a bandeja e continua rodando em segundo plano.
+- **Inicialização Automática com o Sistema (Autostart)**:
+  - Inicia silenciosamente em segundo plano (minimizado na bandeja) ao fazer login no Debian/GNOME.
+  - Pode ser ativado ou desativado com um clique na aba de Configurações ou configurado via XDG Autostart padrão (`~/.config/autostart/dev-status-widget.desktop`).
 - **Filtros e Busca Rápida**:
   - Filtro por repositório específico ou visão unificada de todos.
   - Campo de busca instantânea por título, autor (`@usuario`) ou número (`#123`).
@@ -47,6 +50,7 @@ chmod +x install.sh
 O script cuidará de:
 1. Instalar os pacotes necessários via `apt` (`python3-pyqt6`, `python3-requests`, `python3-yaml`, `libnotify-bin`, `gnome-shell-extension-appindicator`).
 2. Criar o atalho no menu de aplicativos do GNOME (`~/.local/share/applications/dev-status-widget.desktop`).
+3. Configurar a inicialização automática com o sistema no login (`~/.config/autostart/dev-status-widget.desktop`).
 
 ### Opção 2: Instalação Manual
 
@@ -76,6 +80,8 @@ Você pode configurar o aplicativo de duas formas:
 Clique na aba **⚙️ Configurações** no próprio aplicativo para:
 - Adicionar ou remover repositórios (ex: `facebook/react`, `torvalds/linux`, `sua-empresa/projeto`).
 - Inserir seu **GitHub Personal Access Token** (opcional para repos públicos, essencial para repositórios privados e para aumentar o limite da API de 60 para 5.000 requisições/hora).
+- Configurar credenciais do Jira Cloud (URL, e-mail e API token).
+- Marcar a opção **"Iniciar aplicativo automaticamente com o sistema (Debian / GNOME)"**.
 - Ajustar o tempo de checagem automática (ex: a cada 5 minutos).
 - Clicar em **"🔔 Testar Notificação do Debian / GNOME"** para conferir as notificações na sua tela.
 
@@ -95,6 +101,7 @@ refresh_interval_minutes: 5
 sort_order: "oldest_first"  # "oldest_first" ou "newest_first"
 notifications_enabled: true
 minimize_to_tray_on_close: true
+autostart: true
 ```
 
 ---

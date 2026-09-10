@@ -130,3 +130,6 @@ class AppConfig:
     jira_api_token: str = ""
     jira_jql: str = "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC"
 
+    # Inicialização Automática no Sistema (Debian/Linux)
+    autostart: bool = False
+

@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ...core.models import AppConfig
+from ...core.autostart import AutostartManager
 
 
 class SettingsView(QWidget):
@@ -189,12 +190,17 @@ class SettingsView(QWidget):
         self.tray_check.setChecked(True)
         pref_layout.addWidget(self.tray_check, 2, 0, 1, 2)
 
+        # Autostart com o sistema (Debian/Linux)
+        self.autostart_check = QCheckBox("Iniciar aplicativo automaticamente com o sistema (Debian / GNOME)")
+        self.autostart_check.setChecked(False)
+        pref_layout.addWidget(self.autostart_check, 3, 0, 1, 2)
+
         # Botão Testar Notificação
         test_notify_btn = QPushButton("🔔 Testar Notificação do Debian / GNOME")
         test_notify_btn.setProperty("class", "actionButton")
         test_notify_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         test_notify_btn.clicked.connect(self.test_notification_requested.emit)
-        pref_layout.addWidget(test_notify_btn, 3, 0, 1, 2)
+        pref_layout.addWidget(test_notify_btn, 4, 0, 1, 2)
 
         layout.addWidget(pref_group)
 
@@ -232,6 +238,9 @@ class SettingsView(QWidget):
         self.jira_token_input.setText(config.jira_api_token)
         self.jira_jql_input.setText(config.jira_jql)
 
+        # Autostart
+        self.autostart_check.setChecked(AutostartManager.is_enabled() or config.autostart)
+
     def _add_repo(self):
         text = self.new_repo_input.text().strip()
         if text and "/" in text:
@@ -263,6 +272,9 @@ class SettingsView(QWidget):
             self.toggle_jira_token_btn.setText("👁️")
 
     def _save(self):
+        autostart_enabled = self.autostart_check.isChecked()
+        AutostartManager.set_enabled(autostart_enabled)
+
         repos = [self.repo_list.item(i).text() for i in range(self.repo_list.count())]
         new_config = AppConfig(
             github_token=self.token_input.text().strip(),
@@ -278,7 +290,8 @@ class SettingsView(QWidget):
             jira_url=self.jira_url_input.text().strip(),
             jira_email=self.jira_email_input.text().strip(),
             jira_api_token=self.jira_token_input.text().strip(),
-            jira_jql=self.jira_jql_input.text().strip() or "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC"
+            jira_jql=self.jira_jql_input.text().strip() or "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC",
+            autostart=autostart_enabled
         )
         self.config = new_config
         self.settings_saved.emit(new_config)

@@ -1,5 +1,6 @@
-from .models import PullRequestItem, AppConfig
+from .models import PullRequestItem, JiraTaskItem, AppConfig
 from .config import ConfigManager
 from .notifier import DesktopNotifier
+from .autostart import AutostartManager
 
-__all__ = ["PullRequestItem", "AppConfig", "ConfigManager", "DesktopNotifier"]
+__all__ = ["PullRequestItem", "JiraTaskItem", "AppConfig", "ConfigManager", "DesktopNotifier", "AutostartManager"]

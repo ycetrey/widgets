@@ -68,7 +68,7 @@ chmod +x "$SCRIPT_DIR/run.sh"
 
 # 4. Criando Atalho de Aplicativo no GNOME (.desktop)
 echo ""
-echo "[4/4] Criando atalho no menu de aplicativos do GNOME..."
+echo "[4/5] Criando atalho no menu de aplicativos do GNOME..."
 mkdir -p "$DESKTOP_ENTRY_DIR"
 
 DESKTOP_FILE="$DESKTOP_ENTRY_DIR/dev-status-widget.desktop"
@@ -91,6 +91,29 @@ chmod +x "$DESKTOP_FILE"
 if command -v update-desktop-database &> /dev/null; then
     update-desktop-database "$DESKTOP_ENTRY_DIR" &> /dev/null || true
 fi
+
+# 5. Configurando Inicialização Automática com o Sistema (Autostart)
+echo ""
+echo "[5/5] Configurando inicialização automática no login (Autostart)..."
+AUTOSTART_DIR="$HOME/.config/autostart"
+mkdir -p "$AUTOSTART_DIR"
+AUTOSTART_FILE="$AUTOSTART_DIR/dev-status-widget.desktop"
+
+cat <<EOF > "$AUTOSTART_FILE"
+[Desktop Entry]
+Name=Dev Status Widget
+Comment=Monitor de Pull Requests e Métricas com Abas e Notificações
+Exec=$EXEC_PATH --minimized
+Icon=$ICON_PATH
+Terminal=false
+Type=Application
+Categories=Development;Utility;
+X-GNOME-Autostart-enabled=true
+StartupNotify=false
+EOF
+
+chmod +x "$AUTOSTART_FILE"
+echo "Atalho de inicialização criado em: $AUTOSTART_FILE"
 
 echo ""
 echo "=========================================================="
