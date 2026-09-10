@@ -59,7 +59,8 @@ class TestDatabaseManager(unittest.TestCase):
             html_url="https://github.com/org/api/pull/42",
             created_at=now,
             labels=["bug", "urgent"],
-            comments_count=3
+            comments_count=3,
+            review_decision="REVIEW_REQUIRED"
         )
         self.db.save_pull_requests([pr])
         loaded = self.db.get_pull_requests()
@@ -69,6 +70,8 @@ class TestDatabaseManager(unittest.TestCase):
         self.assertEqual(loaded[0].number, 42)
         self.assertEqual(loaded[0].labels, ["bug", "urgent"])
         self.assertEqual(loaded[0].comments_count, 3)
+        self.assertEqual(loaded[0].review_decision, "REVIEW_REQUIRED")
+        self.assertEqual(loaded[0].status_key, "review_required")
 
     def test_notification_deduplication(self):
         now = datetime.now(timezone.utc)

@@ -2,7 +2,7 @@
 Provedor de Pull Requests do GitHub.
 """
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 import requests
 
 from ..core.models import PullRequestItem
@@ -11,6 +11,7 @@ from .base import BaseStatusProvider
 
 class GitHubProvider(BaseStatusProvider):
     API_BASE = "https://api.github.com"
+    GRAPHQL_BASE = "https://api.github.com/graphql"
 
     def __init__(self, token: str = "", repositories: List[str] = None, sort_order: str = "oldest_first"):
         self.token = token.strip() if token else ""
@@ -42,6 +43,122 @@ class GitHubProvider(BaseStatusProvider):
         except Exception:
             return datetime.now(timezone.utc)
 
+    def _fetch_repo_graphql(self, repo_clean: str, headers: Dict[str, str]) -> Optional[List[PullRequestItem]]:
+        """Busca PRs com status de revisão via GitHub GraphQL API em lote."""
+        if "/" not in repo_clean:
+            return None
+        owner, name = repo_clean.split("/", 1)
+        query = """
+        query($owner: String!, $name: String!) {
+          repository(owner: $owner, name: $name) {
+            pullRequests(first: 100, states: OPEN, orderBy: {field: CREATED_AT, direction: ASC}) {
+              nodes {
+                databaseId
+                number
+                title
+                url
+                createdAt
+                updatedAt
+                isDraft
+                reviewDecision
+                author {
+                  login
+                  avatarUrl
+                }
+                labels(first: 10) {
+                  nodes {
+                    name
+                  }
+                }
+                totalCommentsCount
+              }
+            }
+          }
+        }
+        """
+        response = requests.post(
+            self.GRAPHQL_BASE,
+            headers=headers,
+            json={"query": query, "variables": {"owner": owner, "name": name}},
+            timeout=12
+        )
+        if response.status_code == 200:
+            data = response.json()
+            if "errors" in data and not data.get("data", {}).get("repository"):
+                return None
+            repo_data = data.get("data", {}).get("repository")
+            if not repo_data:
+                return None
+            nodes = repo_data.get("pullRequests", {}).get("nodes", [])
+            prs: List[PullRequestItem] = []
+            for item in nodes:
+                author_obj = item.get("author") or {}
+                labels_nodes = (item.get("labels") or {}).get("nodes", [])
+                labels = [l.get("name", "") for l in labels_nodes if isinstance(l, dict) and l.get("name")]
+                pr = PullRequestItem(
+                    id=item.get("databaseId") or item.get("number", 0),
+                    number=item.get("number", 0),
+                    title=item.get("title", "Sem título"),
+                    repo=repo_clean,
+                    author=author_obj.get("login", "desconhecido"),
+                    author_avatar=author_obj.get("avatarUrl", ""),
+                    html_url=item.get("url", ""),
+                    created_at=self._parse_datetime(item.get("createdAt")),
+                    updated_at=self._parse_datetime(item.get("updatedAt")),
+                    is_draft=bool(item.get("isDraft", False)),
+                    labels=labels,
+                    comments_count=item.get("totalCommentsCount", 0),
+                    review_decision=item.get("reviewDecision")
+                )
+                prs.append(pr)
+            return prs
+        return None
+
+    def _fetch_repo_rest(self, repo_clean: str, headers: Dict[str, str]) -> tuple[List[PullRequestItem], Optional[str]]:
+        """Busca PRs via GitHub REST API tradicional."""
+        url = f"{self.API_BASE}/repos/{repo_clean}/pulls"
+        params = {
+            "state": "open",
+            "per_page": 100,
+            "sort": "created",
+            "direction": "asc"
+        }
+        prs: List[PullRequestItem] = []
+        try:
+            response = requests.get(url, headers=headers, params=params, timeout=12)
+            if response.status_code == 200:
+                data = response.json()
+                for item in data:
+                    has_reviewers = bool(item.get("requested_reviewers") or item.get("requested_teams"))
+                    review_dec = "REVIEW_REQUIRED" if has_reviewers else None
+                    pr = PullRequestItem(
+                        id=item.get("id", 0),
+                        number=item.get("number", 0),
+                        title=item.get("title", "Sem título"),
+                        repo=repo_clean,
+                        author=item.get("user", {}).get("login", "desconhecido"),
+                        author_avatar=item.get("user", {}).get("avatar_url", ""),
+                        html_url=item.get("html_url", ""),
+                        created_at=self._parse_datetime(item.get("created_at")),
+                        updated_at=self._parse_datetime(item.get("updated_at")),
+                        is_draft=bool(item.get("draft", False)),
+                        labels=[l.get("name", "") for l in item.get("labels", []) if isinstance(l, dict)],
+                        comments_count=item.get("comments", 0),
+                        review_decision=review_dec
+                    )
+                    prs.append(pr)
+                return prs, None
+            elif response.status_code == 404:
+                return [], f"Repositório '{repo_clean}' não encontrado ou acesso restrito."
+            elif response.status_code == 401:
+                return [], "Token do GitHub inválido ou expirado."
+            elif response.status_code == 403:
+                return [], "Limite de requisições da API atingido. Configure um GitHub Token nas opções."
+            else:
+                return [], f"Erro {response.status_code} ao consultar '{repo_clean}'."
+        except requests.exceptions.RequestException as e:
+            return [], f"Falha de conexão com '{repo_clean}': {str(e)}"
+
     def fetch(self) -> Dict[str, Any]:
         """
         Coleta as PRs abertas de todos os repositórios configurados.
@@ -66,48 +183,25 @@ class GitHubProvider(BaseStatusProvider):
             if not repo_clean or "/" not in repo_clean:
                 continue
 
-            url = f"{self.API_BASE}/repos/{repo_clean}/pulls"
-            params = {
-                "state": "open",
-                "per_page": 100,
-                "sort": "created",
-                "direction": "asc"  # Solicita da mais antiga para a mais recente
-            }
+            repo_prs: Optional[List[PullRequestItem]] = None
 
-            try:
-                response = requests.get(url, headers=headers, params=params, timeout=12)
+            # Tenta via GraphQL quando houver token configurado
+            if self.token:
+                try:
+                    repo_prs = self._fetch_repo_graphql(repo_clean, headers)
+                except Exception:
+                    repo_prs = None
 
-                if response.status_code == 200:
-                    data = response.json()
-                    for item in data:
-                        pr = PullRequestItem(
-                            id=item.get("id", 0),
-                            number=item.get("number", 0),
-                            title=item.get("title", "Sem título"),
-                            repo=repo_clean,
-                            author=item.get("user", {}).get("login", "desconhecido"),
-                            author_avatar=item.get("user", {}).get("avatar_url", ""),
-                            html_url=item.get("html_url", ""),
-                            created_at=self._parse_datetime(item.get("created_at")),
-                            updated_at=self._parse_datetime(item.get("updated_at")),
-                            is_draft=bool(item.get("draft", False)),
-                            labels=[l.get("name", "") for l in item.get("labels", []) if isinstance(l, dict)],
-                            comments_count=item.get("comments", 0)
-                        )
-                        all_prs.append(pr)
-                elif response.status_code == 404:
-                    errors.append(f"Repositório '{repo_clean}' não encontrado ou acesso restrito.")
-                elif response.status_code == 401:
-                    errors.append("Token do GitHub inválido ou expirado.")
-                    break
-                elif response.status_code == 403:
-                    msg = "Limite de requisições da API atingido. Configure um GitHub Token nas opções."
-                    errors.append(msg)
-                    break
-                else:
-                    errors.append(f"Erro {response.status_code} ao consultar '{repo_clean}'.")
-            except requests.exceptions.RequestException as e:
-                errors.append(f"Falha de conexão com '{repo_clean}': {str(e)}")
+            # Fallback para REST se GraphQL não retornou ou se não houver token
+            if repo_prs is None:
+                prs, err = self._fetch_repo_rest(repo_clean, headers)
+                if err:
+                    errors.append(err)
+                    if "Token do GitHub inválido" in err or "Limite de requisições" in err:
+                        break
+                all_prs.extend(prs)
+            else:
+                all_prs.extend(repo_prs)
 
         # Ordenação: da mais antiga para a mais recente (ou o contrário se configurado)
         reverse = (self.sort_order == "newest_first")

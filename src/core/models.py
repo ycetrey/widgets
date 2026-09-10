@@ -20,6 +20,58 @@ class PullRequestItem:
     is_draft: bool = False
     labels: List[str] = field(default_factory=list)
     comments_count: int = 0
+    review_decision: Optional[str] = None
+
+    @property
+    def status_key(self) -> str:
+        """
+        Retorna a chave única do status da PR:
+        - 'draft': PR em rascunho
+        - 'changes_requested': Alterações solicitadas na revisão
+        - 'approved': PR aprovada
+        - 'review_required': Aguardando revisão
+        - 'open': Aberta sem pendências de revisão
+        """
+        if self.is_draft:
+            return "draft"
+        if self.review_decision == "CHANGES_REQUESTED":
+            return "changes_requested"
+        elif self.review_decision == "APPROVED":
+            return "approved"
+        elif self.review_decision == "REVIEW_REQUIRED":
+            return "review_required"
+
+        for label in self.labels:
+            lbl_lower = label.lower()
+            if any(k in lbl_lower for k in ("revisao", "review", "precisa-revisao", "aguardando-revisao")):
+                return "review_required"
+
+        return "open"
+
+    @property
+    def status_label(self) -> str:
+        """Retorna o rótulo descritivo do status."""
+        mapping = {
+            "draft": "Rascunho",
+            "changes_requested": "Mudanças Solicitadas",
+            "approved": "Aprovada",
+            "review_required": "Aguardando Revisão",
+            "open": "Aberta",
+        }
+        return mapping.get(self.status_key, "Aberta")
+
+    @property
+    def status_display(self) -> str:
+        """Retorna o rótulo formatado com emoji para cards e filtros."""
+        mapping = {
+            "draft": "📝 Rascunho",
+            "changes_requested": "🔄 Mudanças Solicitadas",
+            "approved": "✅ Aprovada",
+            "review_required": "👀 Aguardando Revisão",
+            "open": "🟢 Aberta",
+        }
+        return mapping.get(self.status_key, "🟢 Aberta")
+
 
     @property
     def age_days(self) -> float:

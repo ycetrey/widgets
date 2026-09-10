@@ -43,13 +43,18 @@ class PullRequestCard(QFrame):
         num_label.setStyleSheet("color: #89b4fa; font-weight: bold; font-size: 12px;")
         top_layout.addWidget(num_label)
 
-        if self.pr.is_draft:
-            draft_label = QLabel("DRAFT")
-            draft_label.setStyleSheet(
-                "background-color: #45475a; color: #bac2de; border-radius: 4px; "
-                "padding: 2px 6px; font-size: 10px; font-weight: bold;"
-            )
-            top_layout.addWidget(draft_label)
+        # Badge de Status da PR (Aguardando Revisão, Aprovada, Mudanças Solicitadas, Rascunho, Aberta)
+        status_class_map = {
+            "draft": "statusDraft",
+            "review_required": "statusReviewRequired",
+            "approved": "statusApproved",
+            "changes_requested": "statusChangesRequested",
+            "open": "statusOpen",
+        }
+        status_class = status_class_map.get(self.pr.status_key, "statusOpen")
+        status_badge = QLabel(self.pr.status_display)
+        status_badge.setProperty("class", status_class)
+        top_layout.addWidget(status_badge)
 
         top_layout.addStretch()
 
@@ -61,7 +66,7 @@ class PullRequestCard(QFrame):
             "fresh": "urgencyFresh",
         }
         urgency_class = urgency_class_map.get(self.pr.urgency_level, "urgencyFresh")
-        age_label = QLabel(f"⏳ {self.pr.age_humanized}")
+        age_label = QLabel(f"🕒 {self.pr.age_humanized}")
         age_label.setProperty("class", urgency_class)
         top_layout.addWidget(age_label)
 

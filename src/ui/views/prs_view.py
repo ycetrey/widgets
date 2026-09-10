@@ -48,6 +48,17 @@ class PullRequestsView(QWidget):
         self.repo_combo.currentIndexChanged.connect(self._apply_filters)
         filter_layout.addWidget(self.repo_combo)
 
+        # Seletor de status
+        self.status_combo = QComboBox()
+        self.status_combo.addItem("Todos os Status", "all")
+        self.status_combo.addItem("👀 Aguardando Revisão", "review_required")
+        self.status_combo.addItem("✅ Aprovadas", "approved")
+        self.status_combo.addItem("🔄 Mudanças Solicitadas", "changes_requested")
+        self.status_combo.addItem("📝 Rascunhos", "draft")
+        self.status_combo.addItem("🟢 Abertas", "open")
+        self.status_combo.currentIndexChanged.connect(self._apply_filters)
+        filter_layout.addWidget(self.status_combo)
+
         # Campo de busca
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("🔍 Filtrar por título, autor, #número...")
@@ -155,6 +166,30 @@ class PullRequestsView(QWidget):
             self.repo_combo.setCurrentIndex(index)
         self.repo_combo.blockSignals(False)
 
+        # Atualiza lista de status no ComboBox preservando seleção se possível
+        current_status_sel = self.status_combo.currentData() or "all"
+        self.status_combo.blockSignals(True)
+        self.status_combo.clear()
+
+        status_definitions = [
+            ("all", "Todos os Status", len(self.all_prs)),
+            ("review_required", "👀 Aguardando Revisão", sum(1 for p in self.all_prs if p.status_key == "review_required")),
+            ("approved", "✅ Aprovadas", sum(1 for p in self.all_prs if p.status_key == "approved")),
+            ("changes_requested", "🔄 Mudanças Solicitadas", sum(1 for p in self.all_prs if p.status_key == "changes_requested")),
+            ("draft", "📝 Rascunhos", sum(1 for p in self.all_prs if p.status_key == "draft")),
+            ("open", "🟢 Abertas", sum(1 for p in self.all_prs if p.status_key == "open")),
+        ]
+
+        for key, label, count in status_definitions:
+            self.status_combo.addItem(f"{label} ({count})", key)
+
+        status_idx = self.status_combo.findData(current_status_sel)
+        if status_idx != -1:
+            self.status_combo.setCurrentIndex(status_idx)
+        else:
+            self.status_combo.setCurrentIndex(0)
+        self.status_combo.blockSignals(False)
+
         self._apply_filters()
 
     def _apply_filters(self):
@@ -166,6 +201,7 @@ class PullRequestsView(QWidget):
                 widget.deleteLater()
 
         selected_repo = self.repo_combo.currentData()
+        selected_status = self.status_combo.currentData()
         search_query = self.search_input.text().strip().lower()
 
         # Filtra
@@ -173,13 +209,17 @@ class PullRequestsView(QWidget):
         if selected_repo and selected_repo != "all":
             filtered = [pr for pr in filtered if pr.repo == selected_repo]
 
+        if selected_status and selected_status != "all":
+            filtered = [pr for pr in filtered if pr.status_key == selected_status]
+
         if search_query:
             filtered = [
                 pr for pr in filtered
                 if (search_query in pr.title.lower() or
                     search_query in pr.author.lower() or
                     search_query in f"#{pr.number}" or
-                    search_query in pr.repo.lower())
+                    search_query in pr.repo.lower() or
+                    search_query in pr.status_label.lower())
             ]
 
         # Ordena

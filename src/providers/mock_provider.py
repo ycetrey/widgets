@@ -28,7 +28,8 @@ class MockProvider(BaseStatusProvider):
                 created_at=now - timedelta(days=16),
                 is_draft=False,
                 labels=["segurança", "backend", "precisa-revisao"],
-                comments_count=7
+                comments_count=7,
+                review_decision="REVIEW_REQUIRED"
             ),
             PullRequestItem(
                 id=102,
@@ -41,7 +42,8 @@ class MockProvider(BaseStatusProvider):
                 created_at=now - timedelta(days=6),
                 is_draft=False,
                 labels=["bug", "performance"],
-                comments_count=3
+                comments_count=3,
+                review_decision="CHANGES_REQUESTED"
             ),
             PullRequestItem(
                 id=103,
@@ -54,7 +56,8 @@ class MockProvider(BaseStatusProvider):
                 created_at=now - timedelta(days=2),
                 is_draft=False,
                 labels=["enhancement", "linux", "gnome"],
-                comments_count=1
+                comments_count=1,
+                review_decision="APPROVED"
             ),
             PullRequestItem(
                 id=104,
@@ -67,7 +70,8 @@ class MockProvider(BaseStatusProvider):
                 created_at=now - timedelta(hours=3),
                 is_draft=True,
                 labels=["testes", "qa", "draft"],
-                comments_count=0
+                comments_count=0,
+                review_decision=None
             )
         ]
 
@@ -85,7 +89,8 @@ class MockProvider(BaseStatusProvider):
                 created_at=now - timedelta(minutes=5),
                 is_draft=False,
                 labels=["hotfix", "security"],
-                comments_count=0
+                comments_count=0,
+                review_decision="REVIEW_REQUIRED"
             )
             items.append(new_pr)
             new_items.append(new_pr)

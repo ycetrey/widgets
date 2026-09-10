@@ -81,9 +81,16 @@ class DatabaseManager:
                     is_draft INTEGER DEFAULT 0,
                     labels TEXT,
                     comments_count INTEGER DEFAULT 0,
+                    review_decision TEXT,
                     last_synced_at TEXT NOT NULL
                 )
             """)
+
+            # Migração idempotente para bancos existentes
+            try:
+                conn.execute("ALTER TABLE pull_requests ADD COLUMN review_decision TEXT")
+            except sqlite3.OperationalError:
+                pass
 
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS notifications_seen (
@@ -168,8 +175,8 @@ class DatabaseManager:
                     INSERT OR REPLACE INTO pull_requests (
                         id, number, title, repo, author, author_avatar, html_url,
                         created_at, updated_at, is_draft, labels, comments_count,
-                        last_synced_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        review_decision, last_synced_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     pr.id,
                     pr.number,
@@ -183,6 +190,7 @@ class DatabaseManager:
                     1 if pr.is_draft else 0,
                     json.dumps(pr.labels),
                     pr.comments_count,
+                    pr.review_decision,
                     now_iso
                 ))
             conn.commit()
@@ -198,6 +206,9 @@ class DatabaseManager:
                         labels = json.loads(row["labels"])
                     except Exception:
                         pass
+                review_decision = None
+                if "review_decision" in row.keys():
+                    review_decision = row["review_decision"]
                 item = PullRequestItem(
                     id=row["id"],
                     number=row["number"],
@@ -210,7 +221,8 @@ class DatabaseManager:
                     updated_at=self._parse_iso(row["updated_at"]),
                     is_draft=bool(row["is_draft"]),
                     labels=labels,
-                    comments_count=row["comments_count"] or 0
+                    comments_count=row["comments_count"] or 0,
+                    review_decision=review_decision
                 )
                 items.append(item)
         return items

@@ -57,6 +57,57 @@ class TestCoreModels(unittest.TestCase):
         self.assertEqual(prs[1].title, "Intermediária")
         self.assertEqual(prs[2].title, "Mais Recente")
 
+    def test_pr_status_resolution(self):
+        now = datetime.now(timezone.utc)
+
+        # 1. Aguardando Revisão explícito
+        pr_review = PullRequestItem(
+            id=1, number=10, title="PR 10", repo="org/repo", author="dev", author_avatar="",
+            html_url="url", created_at=now, review_decision="REVIEW_REQUIRED"
+        )
+        self.assertEqual(pr_review.status_key, "review_required")
+        self.assertEqual(pr_review.status_label, "Aguardando Revisão")
+        self.assertIn("Aguardando Revisão", pr_review.status_display)
+
+        # 2. Aprovada
+        pr_approved = PullRequestItem(
+            id=2, number=11, title="PR 11", repo="org/repo", author="dev", author_avatar="",
+            html_url="url", created_at=now, review_decision="APPROVED"
+        )
+        self.assertEqual(pr_approved.status_key, "approved")
+        self.assertEqual(pr_approved.status_label, "Aprovada")
+
+        # 3. Mudanças Solicitadas
+        pr_changes = PullRequestItem(
+            id=3, number=12, title="PR 12", repo="org/repo", author="dev", author_avatar="",
+            html_url="url", created_at=now, review_decision="CHANGES_REQUESTED"
+        )
+        self.assertEqual(pr_changes.status_key, "changes_requested")
+        self.assertEqual(pr_changes.status_label, "Mudanças Solicitadas")
+
+        # 4. Rascunho / Draft
+        pr_draft = PullRequestItem(
+            id=4, number=13, title="PR 13", repo="org/repo", author="dev", author_avatar="",
+            html_url="url", created_at=now, is_draft=True, review_decision="REVIEW_REQUIRED"
+        )
+        self.assertEqual(pr_draft.status_key, "draft")
+        self.assertEqual(pr_draft.status_label, "Rascunho")
+
+        # 5. Heurística de label
+        pr_label = PullRequestItem(
+            id=5, number=14, title="PR 14", repo="org/repo", author="dev", author_avatar="",
+            html_url="url", created_at=now, labels=["precisa-revisao"]
+        )
+        self.assertEqual(pr_label.status_key, "review_required")
+
+        # 6. Aberta normal sem revisão
+        pr_open = PullRequestItem(
+            id=6, number=15, title="PR 15", repo="org/repo", author="dev", author_avatar="",
+            html_url="url", created_at=now
+        )
+        self.assertEqual(pr_open.status_key, "open")
+        self.assertEqual(pr_open.status_label, "Aberta")
+
 
 class TestConfigManager(unittest.TestCase):
     def test_load_and_save(self):
@@ -150,5 +201,62 @@ class TestGitHubProvider(unittest.TestCase):
         self.assertEqual(result2["new_items"][0].number, 44)
 
 
+class TestPullRequestsView(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from PyQt6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication(["-platform", "offscreen"])
+
+    def test_status_filter_interaction(self):
+        from src.ui.views.prs_view import PullRequestsView
+        now = datetime.now(timezone.utc)
+        view = PullRequestsView()
+
+        pr_review = PullRequestItem(
+            id=1, number=101, title="Refatorar API", repo="repo/a",
+            author="carlos", author_avatar="", html_url="url1",
+            created_at=now, review_decision="REVIEW_REQUIRED"
+        )
+        pr_approved = PullRequestItem(
+            id=2, number=102, title="Corrigir bug", repo="repo/b",
+            author="ana", author_avatar="", html_url="url2",
+            created_at=now, review_decision="APPROVED"
+        )
+        pr_draft = PullRequestItem(
+            id=3, number=103, title="Draft feature", repo="repo/a",
+            author="marcos", author_avatar="", html_url="url3",
+            created_at=now, is_draft=True
+        )
+
+        view.update_prs([pr_review, pr_approved, pr_draft])
+
+        # Verifica opções populadas no combo
+        self.assertEqual(view.status_combo.findData("all"), 0)
+        self.assertNotEqual(view.status_combo.findData("review_required"), -1)
+        self.assertNotEqual(view.status_combo.findData("approved"), -1)
+        self.assertNotEqual(view.status_combo.findData("draft"), -1)
+
+        # Sem filtro de status (all): 3 cards
+        self.assertEqual(view.cards_layout.count(), 3)
+
+        # Filtra por 'review_required' (Aguardando Revisão)
+        idx_review = view.status_combo.findData("review_required")
+        view.status_combo.setCurrentIndex(idx_review)
+        self.assertEqual(view.cards_layout.count(), 1)
+
+        # Filtra por 'approved'
+        idx_appr = view.status_combo.findData("approved")
+        view.status_combo.setCurrentIndex(idx_appr)
+        self.assertEqual(view.cards_layout.count(), 1)
+
+        # Filtra por 'changes_requested' (zero itens)
+        idx_changes = view.status_combo.findData("changes_requested")
+        view.status_combo.setCurrentIndex(idx_changes)
+        self.assertEqual(view.cards_layout.count(), 1)
+        lbl = view.cards_layout.itemAt(0).widget()
+        self.assertIn("Nenhuma PR encontrada", lbl.text())
+
+
 if __name__ == "__main__":
     unittest.main()
+

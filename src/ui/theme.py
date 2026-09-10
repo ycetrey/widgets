@@ -155,6 +155,57 @@ QLabel.tagBadge {
     font-size: 11px;
 }
 
+/* Badges de Status da PR */
+QLabel.statusReviewRequired {
+    background-color: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+    border: 1px solid #f59e0b;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+QLabel.statusApproved {
+    background-color: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+    border: 1px solid #10b981;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+QLabel.statusChangesRequested {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+    border: 1px solid #ef4444;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+QLabel.statusDraft {
+    background-color: #313244;
+    color: #a6adc8;
+    border: 1px solid #45475a;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+QLabel.statusOpen {
+    background-color: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    border: 1px solid #3b82f6;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
 /* Badges de Urgência por Idade da PR */
 QLabel.urgencyCritical {
     background-color: rgba(239, 68, 68, 0.2);
