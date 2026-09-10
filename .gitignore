@@ -1,0 +1,25 @@
+# Ambientes virtuais
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Configurações com dados sensíveis (tokens/senhas)
+config.yaml
+*.local.yaml
+tests_tmp_*.yaml
+
+# Sistema operacional e IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log

@@ -1,0 +1,16 @@
+{
+  "name": "llms-txt-crawler",
+  "version": "1.0.0",
+  "description": "Crawl llms.txt files and download all linked content",
+  "type": "module",
+  "main": "crawl.js",
+  "scripts": {
+    "crawl": "node crawl.js"
+  },
+  "dependencies": {
+    "commander": "^12.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

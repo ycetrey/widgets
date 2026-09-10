@@ -1,0 +1,48 @@
+# Configuração do Widget de Status e Pull Requests
+# Salve este arquivo como config.yaml no mesmo diretório ou em ~/.config/dev-status-widget/config.yaml
+
+# Token de Acesso Pessoal (PAT) do GitHub (Opcional para repos públicos, Obrigatório para repos privados)
+# Como gerar: https://github.com/settings/tokens (Permissão necessária: 'repo' ou 'public_repo')
+github_token: ""
+
+# Lista de repositórios para monitorar no formato "dono/repositorio"
+repositories:
+  - "facebook/react"
+  - "torvalds/linux"
+  - "golang/go"
+
+# Intervalo de verificação automática em segundo plano (em minutos)
+refresh_interval_minutes: 5
+
+# Ordenação padrão das PRs:
+# "oldest_first" (da mais antiga para a mais recente) ou "newest_first"
+sort_order: "oldest_first"
+
+# Notificações do sistema desktop (GNOME/Debian)
+notifications_enabled: true
+
+# Minimizar para a bandeja ao clicar no botão fechar (X) da janela
+minimize_to_tray_on_close: true
+
+# Iniciar o aplicativo já minimizado na bandeja
+start_minimized: false
+
+# Tema escuro (true/false)
+dark_mode: true
+
+# ==============================================================================
+# Integração com Atlassian Jira (Opcional)
+# ==============================================================================
+jira_enabled: true
+
+# URL base do seu Jira Cloud (ex: https://sua-empresa.atlassian.net)
+jira_url: "https://sua-empresa.atlassian.net"
+
+# E-mail da sua conta Atlassian
+jira_email: "seu-email@empresa.com"
+
+# API Token gerado em: https://id.atlassian.com/manage-profile/security/api-tokens
+jira_api_token: ""
+
+# Consulta JQL para filtrar suas tarefas (padrão: tarefas não resolvidas atribuídas a você)
+jira_jql: "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC"
