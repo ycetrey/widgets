@@ -10,8 +10,6 @@ Um aplicativo/widget desktop leve e moderno para Linux Debian (GNOME) com navega
   - **🔀 Pull Requests**: Visualização centralizada das PRs de todos os repositórios configurados do GitHub, ordenadas da mais antiga para a mais recente.
   - **📋 Jira Tarefas**: Visualização das suas tarefas atribuídas no Jira, com status, prioridades, tempo de atualização e link direto para a issue.
   - **⚙️ Configurações**: Interface gráfica completa para gerenciar repositórios, token do GitHub, credenciais do Jira, intervalo de atualização e notificações sem precisar editar arquivos manuais.
-- **AgyKit Integrado**:
-  - Suíte completa de skills em `.agent/skills/` (design, frontend, documentos Office, webapp testing e automações).
 - **Ordenação por Data (Mais antiga para a mais recente)**:
   - Exibe no topo as PRs que estão aguardando revisão há mais tempo (`created_at ASC`).
   - Badges coloridos de urgência baseados no tempo em aberto:
