@@ -21,6 +21,9 @@ sort_order: "oldest_first"
 # Notificações do sistema desktop (GNOME/Debian)
 notifications_enabled: true
 
+# Reproduzir som estilo WhatsApp ao exibir notificações desktop
+sound_enabled: true
+
 # Minimizar para a bandeja ao clicar no botão fechar (X) da janela
 minimize_to_tray_on_close: true
 

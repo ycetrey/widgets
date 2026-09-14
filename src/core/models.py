@@ -3,7 +3,7 @@ Modelos de dados para o Widget de Status e Pull Requests.
 """
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 
 @dataclass
@@ -21,6 +21,8 @@ class PullRequestItem:
     labels: List[str] = field(default_factory=list)
     comments_count: int = 0
     review_decision: Optional[str] = None
+    checks_summary: Optional[str] = None
+    checks_state: Optional[str] = None
 
     @property
     def status_key(self) -> str:
@@ -124,6 +126,68 @@ class PullRequestItem:
             return "attention"
         return "fresh"
 
+    @staticmethod
+    def _format_relative_time(dt: Optional[datetime]) -> str:
+        if not dt:
+            return ""
+        now = datetime.now(timezone.utc)
+        diff = now - dt
+        seconds = int(diff.total_seconds())
+
+        if seconds < 60:
+            return "just now"
+        elif seconds < 3600:
+            minutes = max(1, seconds // 60)
+            return f"{minutes} {'minute' if minutes == 1 else 'minutes'} ago"
+        elif seconds < 86400:
+            hours = max(1, seconds // 3600)
+            return f"{hours} {'hour' if hours == 1 else 'hours'} ago"
+        elif seconds < 172800:
+            return "yesterday"
+        else:
+            days = seconds // 86400
+            if days < 30:
+                return f"{days} days ago"
+            elif days < 365:
+                months = days // 30
+                return f"{months} {'month' if months == 1 else 'months'} ago"
+            else:
+                years = days // 365
+                return f"{years} {'year' if years == 1 else 'years'} ago"
+
+    @property
+    def opened_humanized(self) -> str:
+        return self._format_relative_time(self.created_at)
+
+    @property
+    def updated_humanized(self) -> str:
+        return self._format_relative_time(self.updated_at) if self.updated_at else ""
+
+    @property
+    def review_display_github(self) -> Optional[Tuple[str, str, str]]:
+        """
+        Retorna (texto, cor_hex, icone) no padrão GitHub:
+        - ('Review required', '#d29922', '➖')
+        - ('Approved', '#3fb950', '✔')
+        - ('Changes requested', '#f85149', '❌')
+        - ('Draft', '#7d8590', '📝')
+        """
+        if self.is_draft:
+            return ("Draft", "#7d8590", "📝")
+        if self.review_decision == "CHANGES_REQUESTED":
+            return ("Changes requested", "#f85149", "❌")
+        elif self.review_decision == "APPROVED":
+            return ("Approved", "#3fb950", "✔")
+        elif self.review_decision == "REVIEW_REQUIRED":
+            return ("Review required", "#d29922", "➖")
+
+        for label in self.labels:
+            lbl_lower = label.lower()
+            if any(k in lbl_lower for k in ("revisao", "review", "precisa-revisao", "aguardando-revisao")):
+                return ("Review required", "#d29922", "➖")
+
+        return None
+
 
 @dataclass
 class JiraTaskItem:
@@ -171,10 +235,12 @@ class JiraTaskItem:
 @dataclass
 class AppConfig:
     github_token: str = ""
+    github_username: str = ""
     repositories: List[str] = field(default_factory=list)
     refresh_interval_minutes: int = 5
     sort_order: str = "oldest_first"  # "oldest_first" ou "newest_first"
     notifications_enabled: bool = True
+    sound_enabled: bool = True
     minimize_to_tray_on_close: bool = True
     start_minimized: bool = False
     dark_mode: bool = True
@@ -189,4 +255,40 @@ class AppConfig:
 
     # Inicialização Automática no Sistema (Debian/Linux)
     autostart: bool = False
+
+
+@dataclass
+class NotificationItem:
+    id: int
+    item_key: str
+    item_type: str  # "pr", "jira", "system"
+    title: str
+    message: str
+    link_url: Optional[str] = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    is_dismissed: bool = False
+
+    @property
+    def time_humanized(self) -> str:
+        now = datetime.now(timezone.utc)
+        diff = now - self.created_at
+        seconds = int(diff.total_seconds())
+
+        if seconds < 60:
+            return "há poucos segundos"
+        elif seconds < 3600:
+            minutes = max(1, seconds // 60)
+            return f"há {minutes} min"
+        elif seconds < 86400:
+            hours = max(1, seconds // 3600)
+            return f"há {hours} h"
+        else:
+            days = seconds // 86400
+            if days == 1:
+                return "ontem"
+            elif days < 30:
+                return f"há {days} dias"
+            else:
+                months = days // 30
+                return f"há {months} {'mês' if months == 1 else 'meses'}"
 

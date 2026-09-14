@@ -13,17 +13,20 @@ class GitHubProvider(BaseStatusProvider):
     API_BASE = "https://api.github.com"
     GRAPHQL_BASE = "https://api.github.com/graphql"
 
-    def __init__(self, token: str = "", repositories: List[str] = None, sort_order: str = "oldest_first"):
+    def __init__(self, token: str = "", repositories: List[str] = None, sort_order: str = "oldest_first", github_username: str = ""):
         self.token = token.strip() if token else ""
         self.repositories = repositories or []
         self.sort_order = sort_order
+        self.current_user = github_username.strip()
         self._known_pr_urls: Set[str] = set()
         self._is_first_run: bool = True
 
-    def update_config(self, token: str, repositories: List[str], sort_order: str = "oldest_first"):
+    def update_config(self, token: str, repositories: List[str], sort_order: str = "oldest_first", github_username: str = ""):
         self.token = token.strip() if token else ""
         self.repositories = repositories
         self.sort_order = sort_order
+        if github_username:
+            self.current_user = github_username.strip()
 
     def _get_headers(self) -> Dict[str, str]:
         headers = {
@@ -71,6 +74,27 @@ class GitHubProvider(BaseStatusProvider):
                   }
                 }
                 totalCommentsCount
+                commits(last: 1) {
+                  nodes {
+                    commit {
+                      statusCheckRollup {
+                        state
+                        contexts(first: 50) {
+                          totalCount
+                          nodes {
+                            ... on CheckRun {
+                              conclusion
+                              status
+                            }
+                            ... on StatusContext {
+                              state
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
               }
             }
           }
@@ -95,6 +119,25 @@ class GitHubProvider(BaseStatusProvider):
                 author_obj = item.get("author") or {}
                 labels_nodes = (item.get("labels") or {}).get("nodes", [])
                 labels = [l.get("name", "") for l in labels_nodes if isinstance(l, dict) and l.get("name")]
+
+                checks_summary = None
+                checks_state = None
+                commits_nodes = (item.get("commits") or {}).get("nodes", [])
+                if commits_nodes:
+                    commit_obj = commits_nodes[0].get("commit") or {}
+                    rollup = commit_obj.get("statusCheckRollup") or {}
+                    if rollup:
+                        checks_state = rollup.get("state")
+                        contexts = rollup.get("contexts") or {}
+                        total = contexts.get("totalCount", 0)
+                        if total > 0:
+                            c_nodes = contexts.get("nodes", [])
+                            success_count = sum(
+                                1 for c in c_nodes
+                                if (c.get("conclusion") or "").upper() == "SUCCESS" or (c.get("state") or "").upper() == "SUCCESS"
+                            )
+                            checks_summary = f"{success_count}/{total}"
+
                 pr = PullRequestItem(
                     id=item.get("databaseId") or item.get("number", 0),
                     number=item.get("number", 0),
@@ -108,7 +151,9 @@ class GitHubProvider(BaseStatusProvider):
                     is_draft=bool(item.get("isDraft", False)),
                     labels=labels,
                     comments_count=item.get("totalCommentsCount", 0),
-                    review_decision=item.get("reviewDecision")
+                    review_decision=item.get("reviewDecision"),
+                    checks_summary=checks_summary,
+                    checks_state=checks_state
                 )
                 prs.append(pr)
             return prs
@@ -224,8 +269,17 @@ class GitHubProvider(BaseStatusProvider):
             # Atualiza o conjunto de conhecidos
             self._known_pr_urls = current_urls
 
+        if not self.current_user and self.token:
+            try:
+                user_res = requests.get(f"{self.API_BASE}/user", headers=headers, timeout=5)
+                if user_res.status_code == 200:
+                    self.current_user = user_res.json().get("login", "")
+            except Exception:
+                pass
+
         return {
             "items": all_prs,
             "new_items": new_items,
-            "errors": errors
+            "errors": errors,
+            "current_user": self.current_user
         }

@@ -35,6 +35,7 @@ if command -v apt-get &> /dev/null; then
         python3 \
         python3-pip \
         python3-pyqt6 \
+        python3-pyqt6.qtsvg \
         python3-requests \
         python3-yaml \
         libnotify-bin \

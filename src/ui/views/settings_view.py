@@ -185,22 +185,27 @@ class SettingsView(QWidget):
         self.notify_check.setChecked(True)
         pref_layout.addWidget(self.notify_check, 1, 0, 1, 2)
 
+        # Som de notificação (estilo WhatsApp)
+        self.sound_check = QCheckBox("Tocar som (estilo WhatsApp) ao exibir notificações")
+        self.sound_check.setChecked(True)
+        pref_layout.addWidget(self.sound_check, 2, 0, 1, 2)
+
         # Minimizar para bandeja
         self.tray_check = QCheckBox("Minimizar para a barra/bandeja ao clicar no botão fechar (X)")
         self.tray_check.setChecked(True)
-        pref_layout.addWidget(self.tray_check, 2, 0, 1, 2)
+        pref_layout.addWidget(self.tray_check, 3, 0, 1, 2)
 
         # Autostart com o sistema (Debian/Linux)
         self.autostart_check = QCheckBox("Iniciar aplicativo automaticamente com o sistema (Debian / GNOME)")
         self.autostart_check.setChecked(False)
-        pref_layout.addWidget(self.autostart_check, 3, 0, 1, 2)
+        pref_layout.addWidget(self.autostart_check, 4, 0, 1, 2)
 
         # Botão Testar Notificação
         test_notify_btn = QPushButton("🔔 Testar Notificação do Debian / GNOME")
         test_notify_btn.setProperty("class", "actionButton")
         test_notify_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         test_notify_btn.clicked.connect(self.test_notification_requested.emit)
-        pref_layout.addWidget(test_notify_btn, 4, 0, 1, 2)
+        pref_layout.addWidget(test_notify_btn, 5, 0, 1, 2)
 
         layout.addWidget(pref_group)
 
@@ -229,6 +234,7 @@ class SettingsView(QWidget):
         self.token_input.setText(config.github_token)
         self.interval_spin.setValue(config.refresh_interval_minutes)
         self.notify_check.setChecked(config.notifications_enabled)
+        self.sound_check.setChecked(config.sound_enabled)
         self.tray_check.setChecked(config.minimize_to_tray_on_close)
 
         # Jira
@@ -282,6 +288,7 @@ class SettingsView(QWidget):
             refresh_interval_minutes=self.interval_spin.value(),
             sort_order=self.config.sort_order,
             notifications_enabled=self.notify_check.isChecked(),
+            sound_enabled=self.sound_check.isChecked(),
             minimize_to_tray_on_close=self.tray_check.isChecked(),
             start_minimized=self.config.start_minimized,
             dark_mode=self.config.dark_mode,

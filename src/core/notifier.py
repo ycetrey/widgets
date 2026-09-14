@@ -4,26 +4,90 @@ Gerenciador de notificações desktop para Linux (GNOME/Debian) e outras platafo
 import os
 import shutil
 import subprocess
+import time
 from typing import List, Optional
+from PyQt6.QtCore import QUrl
 from PyQt6.QtGui import QIcon
+from PyQt6.QtMultimedia import QSoundEffect
 from PyQt6.QtWidgets import QSystemTrayIcon
 
 
 class DesktopNotifier:
-    def __init__(self, tray_icon: Optional[QSystemTrayIcon] = None, icon_path: Optional[str] = None):
+    def __init__(
+        self,
+        tray_icon: Optional[QSystemTrayIcon] = None,
+        icon_path: Optional[str] = None,
+        sound_path: Optional[str] = None,
+        sound_enabled: bool = True,
+    ):
         self.tray_icon = tray_icon
         self.icon_path = os.path.abspath(icon_path) if icon_path else ""
+        self.sound_path = os.path.abspath(sound_path) if sound_path else ""
+        self.sound_enabled = sound_enabled
+        self._last_sound_time = 0.0
         self._notify_send_available = shutil.which("notify-send") is not None
+
+        self._sound_effect: Optional[QSoundEffect] = None
+        if self.sound_path and os.path.exists(self.sound_path):
+            try:
+                self._sound_effect = QSoundEffect()
+                self._sound_effect.setSource(QUrl.fromLocalFile(self.sound_path))
+                self._sound_effect.setVolume(0.85)
+            except Exception as e:
+                print(f"[Notifier] Erro ao carregar som de notificação: {e}")
 
     def set_tray_icon(self, tray_icon: QSystemTrayIcon):
         self.tray_icon = tray_icon
 
-    def notify(self, title: str, message: str, urgency: str = "normal"):
+    def set_sound_enabled(self, enabled: bool):
+        self.sound_enabled = enabled
+
+    def play_sound(self, force: bool = False):
         """
-        Dispara uma notificação nativa para o usuário com o ícone do aplicativo.
+        Reproduz o som de notificação (estilo WhatsApp) de forma assíncrona.
+        Possui debounce de 1 segundo para evitar sobreposição em disparos em lote.
+        """
+        if not self.sound_enabled:
+            return
+
+        now = time.time()
+        if not force and (now - self._last_sound_time < 1.0):
+            return
+        self._last_sound_time = now
+
+        # 1. Tenta via QSoundEffect (nativa, assíncrona e baixa latência)
+        if self._sound_effect is not None:
+            try:
+                self._sound_effect.play()
+                return
+            except Exception as e:
+                print(f"[Notifier] Erro ao reproduzir via QSoundEffect: {e}")
+
+        # 2. Fallback para utilitários do sistema Linux
+        if self.sound_path and os.path.exists(self.sound_path):
+            for player in ["pw-play", "canberra-gtk-play", "aplay"]:
+                if shutil.which(player):
+                    try:
+                        args = (
+                            [player, "-f", self.sound_path]
+                            if player == "canberra-gtk-play"
+                            else [player, "-q", self.sound_path]
+                            if player == "aplay"
+                            else [player, self.sound_path]
+                        )
+                        subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        return
+                    except Exception:
+                        pass
+
+    def notify(self, title: str, message: str, urgency: str = "normal", play_sound: bool = True):
+        """
+        Dispara uma notificação nativa para o usuário com o ícone do aplicativo e som.
         Tenta primeiro via notify-send (padrão GNOME/Debian com ícone oficial),
         e usa QSystemTrayIcon com QIcon como fallback elegante.
         """
+        if play_sound:
+            self.play_sound()
         sent_via_cmd = False
         if self._notify_send_available:
             try:

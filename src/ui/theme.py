@@ -114,27 +114,77 @@ QPushButton.primaryButton:hover {
     background-color: #2563eb;
 }
 
-/* Cards de Pull Request */
-QFrame.prCard {
-    background-color: #181825;
-    border: 1px solid #313244;
-    border-radius: 10px;
-    padding: 12px;
+/* Container de Lista de Pull Requests (Estilo GitHub) */
+QFrame#prsContainerFrame {
+    background-color: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
 }
 
-QFrame.prCard:hover {
-    border: 1px solid #45475a;
-    background-color: #1e1e2e;
+/* Linha de Pull Request individual (GitHub List Row) */
+QFrame.prRow, QFrame[class="prRow"], QFrame.prCard, QFrame[class="prCard"] {
+    background-color: #161b22;
+    border: none;
+    border-bottom: 1px solid #30363d;
+    border-left: 3px solid transparent;
+    padding: 10px 14px;
+}
+
+QFrame.prRow:hover, QFrame[class="prRow"]:hover, QFrame.prCard:hover {
+    background-color: #1c2128;
+    border-left: 3px solid #1f6feb;
+}
+
+/* Borda azul na esquerda para PRs do próprio usuário */
+QFrame.prRow[isOwn="true"], QFrame[class="prRow"][isOwn="true"], QFrame.prCard[isOwn="true"] {
+    border-left: 3px solid #1f6feb;
+}
+
+QFrame.prRow[isOwn="true"]:hover, QFrame[class="prRow"][isOwn="true"]:hover, QFrame.prCard[isOwn="true"]:hover {
+    background-color: #1c2128;
+    border-left: 3px solid #388bfd;
+}
+
+/* Último item sem borda inferior dupla */
+QFrame.prRow[isLast="true"], QFrame[class="prRow"][isLast="true"] {
+    border-bottom: none;
 }
 
 QLabel.prTitle {
-    color: #cdd6f4;
+    color: #e6edf3;
     font-size: 14px;
-    font-weight: bold;
+    font-weight: 600;
+}
+
+QLabel.prTitle:hover {
+    color: #58a6ff;
+    text-decoration: underline;
+}
+
+QLabel.prMeta {
+    color: #7d8590;
+    font-size: 12px;
+}
+
+/* Badge azul sutil de repositório */
+QLabel.repoBadgeBlue {
+    background-color: rgba(56, 139, 253, 0.12);
+    color: #58a6ff;
+    border: 1px solid rgba(56, 139, 253, 0.35);
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+QLabel.commentCount {
+    color: #7d8590;
+    font-size: 12px;
+    font-weight: 500;
 }
 
 QLabel.prSubtitle {
-    color: #a6adc8;
+    color: #7d8590;
     font-size: 12px;
 }
 
@@ -247,10 +297,10 @@ QLabel.urgencyFresh {
     font-weight: bold;
 }
 
-/* Barra de Rolagem */
-QScrollArea {
+/* Barra de Rolagem e Áreas de Conteúdo */
+QScrollArea, QWidget#cardsContainer {
     border: none;
-    background-color: transparent;
+    background-color: #0d1117;
 }
 
 QScrollBar:vertical {

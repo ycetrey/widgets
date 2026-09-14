@@ -3,6 +3,7 @@ Janela principal do aplicativo com suporte a abas, bandeja e auto-refresh.
 """
 import os
 from datetime import datetime
+from pathlib import Path
 from PyQt6.QtCore import QObject, QThread, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QCloseEvent, QIcon, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
@@ -24,6 +25,7 @@ from ..providers.github_provider import GitHubProvider
 from ..providers.jira_provider import JiraProvider
 from .tray import SystemTrayManager
 from .views.jira_view import JiraView
+from .views.notifications_view import NotificationsView
 from .views.prs_view import PullRequestsView
 from .views.settings_view import SettingsView
 from .widgets.tab_button import NavTabButton
@@ -61,7 +63,8 @@ class MainWindow(QMainWindow):
             self.github_provider = GitHubProvider(
                 token=self.config.github_token,
                 repositories=self.config.repositories,
-                sort_order=self.config.sort_order
+                sort_order=self.config.sort_order,
+                github_username=self.config.github_username
             )
 
         # Inicializa o provedor Jira
@@ -76,7 +79,13 @@ class MainWindow(QMainWindow):
                 demo_mode=False
             )
 
-        self.notifier = DesktopNotifier(icon_path=self.icon_path)
+        base_dir = Path(__file__).resolve().parent.parent.parent
+        sound_path = str(base_dir / "assets" / "sounds" / "notification.wav")
+        self.notifier = DesktopNotifier(
+            icon_path=self.icon_path,
+            sound_path=sound_path,
+            sound_enabled=self.config.sound_enabled
+        )
         self.db = DatabaseManager()
 
         # Worker e Thread
@@ -115,6 +124,8 @@ class MainWindow(QMainWindow):
                 if cached_jira:
                     self.jira_view.update_tasks(cached_jira)
                     self.tab_jira.set_count(len(cached_jira))
+
+            self._reload_notifications()
         except Exception as e:
             print(f"[Database] Erro ao carregar dados do cache inicial: {e}")
 
@@ -154,10 +165,16 @@ class MainWindow(QMainWindow):
         self.tab_jira.setVisible(self.config.jira_enabled)
         tab_layout.addWidget(self.tab_jira)
 
-        # Aba 2: Configurações
+        # Aba 2: Notificações
+        self.tab_notifications = NavTabButton("🔔 Notificações", count=0)
+        self.tab_notifications.set_active(False)
+        self.tab_notifications.clicked.connect(lambda: self._switch_tab(2))
+        tab_layout.addWidget(self.tab_notifications)
+
+        # Aba 3: Configurações
         self.tab_settings = NavTabButton("⚙️ Configurações", count=0)
         self.tab_settings.set_active(False)
-        self.tab_settings.clicked.connect(lambda: self._switch_tab(2))
+        self.tab_settings.clicked.connect(lambda: self._switch_tab(3))
         tab_layout.addWidget(self.tab_settings)
 
         tab_layout.addStretch()
@@ -167,7 +184,10 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
 
         # View 0: Pull Requests
-        self.prs_view = PullRequestsView(sort_order=self.config.sort_order)
+        self.prs_view = PullRequestsView(
+            sort_order=self.config.sort_order,
+            current_user=self.config.github_username or "antonio-fiscalmax"
+        )
         self.prs_view.refresh_requested.connect(self.start_fetch)
         self.prs_view.sort_changed.connect(self._on_sort_changed)
         self.stack.addWidget(self.prs_view)
@@ -177,7 +197,13 @@ class MainWindow(QMainWindow):
         self.jira_view.refresh_requested.connect(self.start_fetch)
         self.stack.addWidget(self.jira_view)
 
-        # View 2: Configurações
+        # View 2: Notificações
+        self.notifications_view = NotificationsView()
+        self.notifications_view.dismiss_one_requested.connect(self._on_dismiss_notification)
+        self.notifications_view.clear_all_requested.connect(self._on_clear_all_notifications)
+        self.stack.addWidget(self.notifications_view)
+
+        # View 3: Configurações
         self.settings_view = SettingsView(config=self.config)
         self.settings_view.settings_saved.connect(self._on_settings_saved)
         self.settings_view.test_notification_requested.connect(self._on_test_notification)
@@ -194,7 +220,7 @@ class MainWindow(QMainWindow):
         self.tray.show()
         self.tray.toggle_window_requested.connect(self.toggle_window_visibility)
         self.tray.refresh_requested.connect(self.start_fetch)
-        self.tray.open_settings_requested.connect(lambda: self._switch_tab(2))
+        self.tray.open_settings_requested.connect(lambda: self._switch_tab(3))
         self.tray.quit_requested.connect(self.quit_app)
 
     def _setup_shortcuts(self):
@@ -208,7 +234,8 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(index)
         self.tab_prs.set_active(index == 0)
         self.tab_jira.set_active(index == 1)
-        self.tab_settings.set_active(index == 2)
+        self.tab_notifications.set_active(index == 2)
+        self.tab_settings.set_active(index == 3)
 
     def _start_timer(self):
         interval_ms = max(1, self.config.refresh_interval_minutes) * 60 * 1000
@@ -223,6 +250,7 @@ class MainWindow(QMainWindow):
     def _on_settings_saved(self, new_config: AppConfig):
         self.config = new_config
         self.config_manager.save(new_config)
+        self.notifier.set_sound_enabled(new_config.sound_enabled)
 
         if hasattr(self.github_provider, "update_config"):
             self.github_provider.update_config(
@@ -248,12 +276,47 @@ class MainWindow(QMainWindow):
         self.start_fetch()
         self._switch_tab(0)
 
+    def _reload_notifications(self):
+        try:
+            active_notifs = self.db.get_active_notifications()
+            self.notifications_view.set_notifications(active_notifs)
+            self.tab_notifications.set_count(len(active_notifs))
+        except Exception as e:
+            print(f"[Database] Erro ao recarregar notificações: {e}")
+
+    def _on_dismiss_notification(self, notif_id: int):
+        try:
+            self.db.dismiss_notification(notif_id)
+            self._reload_notifications()
+            self.status_bar.showMessage("Notificação removida.", 2500)
+        except Exception as e:
+            print(f"[Database] Erro ao remover notificação: {e}")
+
+    def _on_clear_all_notifications(self):
+        try:
+            self.db.dismiss_all_notifications()
+            self._reload_notifications()
+            self.status_bar.showMessage("Todas as notificações foram limpas.", 2500)
+        except Exception as e:
+            print(f"[Database] Erro ao limpar notificações: {e}")
+
     def _on_test_notification(self):
         self.notifier.notify(
             "Dev Status Widget",
             "Notificação do GNOME funcionando perfeitamente! 🚀",
             urgency="normal"
         )
+        try:
+            self.db.add_notification(
+                item_key=f"system:test:{datetime.now().timestamp()}",
+                item_type="system",
+                title="Dev Status Widget",
+                message="Notificação do GNOME funcionando perfeitamente! 🚀",
+                link_url=None
+            )
+            self._reload_notifications()
+        except Exception as e:
+            print(f"[Database] Erro ao registrar notificação de teste: {e}")
         self.status_bar.showMessage("Notificação de teste disparada!", 3000)
 
     def start_fetch(self):
@@ -288,6 +351,9 @@ class MainWindow(QMainWindow):
         pr_items = pr_res.get("items", [])
         pr_new = pr_res.get("new_items", [])
         pr_errors = pr_res.get("errors", [])
+        current_user = pr_res.get("current_user") or self.config.github_username
+        if current_user:
+            self.prs_view.set_current_user(current_user)
 
         jira_items = jira_res.get("items", [])
         jira_new = jira_res.get("new_items", [])
@@ -329,8 +395,30 @@ class MainWindow(QMainWindow):
                 db_jira_new = self.db.detect_and_record_new_jira(jira_items) if jira_items else []
                 if db_pr_new:
                     self.notifier.notify_new_prs(db_pr_new)
+                    for pr in db_pr_new:
+                        title = f"Nova PR em {pr.repo}"
+                        msg = f"#{pr.number}: {pr.title}\npor @{pr.author}"
+                        self.db.add_notification(
+                            item_key=f"pr:{pr.id}",
+                            item_type="pr",
+                            title=title,
+                            message=msg,
+                            link_url=pr.html_url
+                        )
                 if db_jira_new:
                     self.notifier.notify_new_jira_tasks(db_jira_new)
+                    for task in db_jira_new:
+                        title = f"Nova Tarefa Jira: {task.key}"
+                        msg = f"{task.summary}\nStatus: {task.status} | Prioridade: {task.priority}"
+                        self.db.add_notification(
+                            item_key=f"jira:{task.key}",
+                            item_type="jira",
+                            title=title,
+                            message=msg,
+                            link_url=task.html_url
+                        )
+                if db_pr_new or db_jira_new:
+                    self._reload_notifications()
             except Exception as e:
                 print(f"[Database] Erro ao processar notificações no SQLite: {e}")
 

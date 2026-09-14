@@ -58,10 +58,12 @@ class ConfigManager:
 
             return AppConfig(
                 github_token=str(data.get("github_token") or "").strip(),
+                github_username=str(data.get("github_username") or "").strip(),
                 repositories=[str(r).strip() for r in data.get("repositories", []) if str(r).strip()],
                 refresh_interval_minutes=int(data.get("refresh_interval_minutes", 5)),
                 sort_order=str(data.get("sort_order", "oldest_first")),
                 notifications_enabled=bool(data.get("notifications_enabled", True)),
+                sound_enabled=bool(data.get("sound_enabled", True)),
                 minimize_to_tray_on_close=bool(data.get("minimize_to_tray_on_close", True)),
                 start_minimized=bool(data.get("start_minimized", False)),
                 dark_mode=bool(data.get("dark_mode", True)),
@@ -85,10 +87,12 @@ class ConfigManager:
             self._config_file.parent.mkdir(parents=True, exist_ok=True)
             data = {
                 "github_token": self.config.github_token,
+                "github_username": self.config.github_username,
                 "repositories": self.config.repositories,
                 "refresh_interval_minutes": self.config.refresh_interval_minutes,
                 "sort_order": self.config.sort_order,
                 "notifications_enabled": self.config.notifications_enabled,
+                "sound_enabled": self.config.sound_enabled,
                 "minimize_to_tray_on_close": self.config.minimize_to_tray_on_close,
                 "start_minimized": self.config.start_minimized,
                 "dark_mode": self.config.dark_mode,

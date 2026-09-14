@@ -8,8 +8,9 @@ from .base import BaseStatusProvider
 
 
 class MockProvider(BaseStatusProvider):
-    def __init__(self, sort_order: str = "oldest_first"):
+    def __init__(self, sort_order: str = "oldest_first", current_user: str = "antonio-fiscalmax"):
         self.sort_order = sort_order
+        self.current_user = current_user
         self._cycle = 0
 
     def fetch(self) -> Dict[str, Any]:
@@ -18,60 +19,55 @@ class MockProvider(BaseStatusProvider):
 
         items: List[PullRequestItem] = [
             PullRequestItem(
-                id=101,
-                number=142,
-                title="Refatorar camada de autenticação JWT e migrar tokens para HTTP-only cookies",
-                repo="sua-empresa/backend",
-                author="carlos-dev",
+                id=1080,
+                number=1080,
+                title="promote(FF-522,FF-523,FF-560,FF-561,FF-562,FF-563): rc-homolog",
+                repo="Fiscalmax/api-monorepo",
+                author="antonio-fiscalmax",
                 author_avatar="",
                 html_url="https://github.com",
-                created_at=now - timedelta(days=16),
+                created_at=now - timedelta(days=7),
+                updated_at=now - timedelta(days=7),
                 is_draft=False,
-                labels=["segurança", "backend", "precisa-revisao"],
-                comments_count=7,
-                review_decision="REVIEW_REQUIRED"
-            ),
-            PullRequestItem(
-                id=102,
-                number=89,
-                title="Corrigir memory leak no worker de processamento assíncrono em background",
-                repo="sua-empresa/core",
-                author="mariana-s",
-                author_avatar="",
-                html_url="https://github.com",
-                created_at=now - timedelta(days=6),
-                is_draft=False,
-                labels=["bug", "performance"],
-                comments_count=3,
-                review_decision="CHANGES_REQUESTED"
-            ),
-            PullRequestItem(
-                id=103,
-                number=304,
-                title="Adicionar suporte a notificações nativas do GNOME no Debian Linux",
-                repo="sua-empresa/desktop-widgets",
-                author="voce",
-                author_avatar="",
-                html_url="https://github.com",
-                created_at=now - timedelta(days=2),
-                is_draft=False,
-                labels=["enhancement", "linux", "gnome"],
-                comments_count=1,
-                review_decision="APPROVED"
-            ),
-            PullRequestItem(
-                id=104,
-                number=512,
-                title="Implementar suite de testes de integração ponta a ponta (E2E)",
-                repo="sua-empresa/frontend",
-                author="lucas-qa",
-                author_avatar="",
-                html_url="https://github.com",
-                created_at=now - timedelta(hours=3),
-                is_draft=True,
-                labels=["testes", "qa", "draft"],
+                labels=["promote", "rc-homolog"],
                 comments_count=0,
-                review_decision=None
+                review_decision=None,
+                checks_summary="3/3",
+                checks_state="SUCCESS"
+            ),
+            PullRequestItem(
+                id=1079,
+                number=1079,
+                title="chore: incrementa versao do projeto no sonar [skip ci]",
+                repo="Fiscalmax/api-monorepo",
+                author="matheus-furiatto-FiscalMax",
+                author_avatar="",
+                html_url="https://github.com",
+                created_at=now - timedelta(days=7),
+                updated_at=now - timedelta(days=7),
+                is_draft=False,
+                labels=["chore", "sonar"],
+                comments_count=0,
+                review_decision="REVIEW_REQUIRED",
+                checks_summary=None,
+                checks_state=None
+            ),
+            PullRequestItem(
+                id=1078,
+                number=1078,
+                title="fix/ff-522-manter-selecao-ao-paginar",
+                repo="Fiscalmax/front-client",
+                author="antonio-fiscalmax",
+                author_avatar="",
+                html_url="https://github.com",
+                created_at=now - timedelta(days=7),
+                updated_at=now - timedelta(days=7),
+                is_draft=False,
+                labels=["bugfix", "paginacao"],
+                comments_count=2,
+                review_decision="APPROVED",
+                checks_summary="6/6",
+                checks_state="SUCCESS"
             )
         ]
 
@@ -82,7 +78,7 @@ class MockProvider(BaseStatusProvider):
                 id=105,
                 number=515,
                 title="Hotfix: Atualização de dependências críticas de segurança",
-                repo="sua-empresa/backend",
+                repo="Fiscalmax/api-monorepo",
                 author="ana-sec",
                 author_avatar="",
                 html_url="https://github.com",
@@ -101,5 +97,6 @@ class MockProvider(BaseStatusProvider):
         return {
             "items": items,
             "new_items": new_items,
-            "errors": []
+            "errors": [],
+            "current_user": self.current_user
         }

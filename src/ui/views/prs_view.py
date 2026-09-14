@@ -24,11 +24,25 @@ class PullRequestsView(QWidget):
     refresh_requested = pyqtSignal()
     sort_changed = pyqtSignal(str)
 
-    def __init__(self, sort_order: str = "oldest_first", parent: QWidget = None):
+    def __init__(self, sort_order: str = "oldest_first", current_user: str = "antonio-fiscalmax", parent: QWidget = None):
         super().__init__(parent)
         self.all_prs: List[PullRequestItem] = []
         self.current_sort_order = sort_order  # "oldest_first" ou "newest_first"
+        self.current_user = current_user.strip() if current_user else "antonio-fiscalmax"
         self._init_ui()
+
+    def set_current_user(self, username: str):
+        cleaned = username.strip() if username else ""
+        if cleaned and cleaned != self.current_user:
+            self.current_user = cleaned
+            self._apply_filters()
+
+    def _is_own_pr(self, pr: PullRequestItem) -> bool:
+        if not self.current_user:
+            return False
+        user = self.current_user.lower()
+        author = pr.author.lower()
+        return author == user or (user and author in (user, "voce", "antonio-fiscalmax"))
 
     def _init_ui(self):
         root_layout = QVBoxLayout(self)
@@ -98,17 +112,29 @@ class PullRequestsView(QWidget):
         # 3. Área Rolável com a lista de PRs
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setObjectName("prsScrollArea")
 
         self.cards_container = QWidget()
-        self.cards_layout = QVBoxLayout(self.cards_container)
-        self.cards_layout.setContentsMargins(14, 14, 14, 14)
-        self.cards_layout.setSpacing(10)
+        self.cards_container.setObjectName("cardsContainer")
+        self.container_layout = QVBoxLayout(self.cards_container)
+        self.container_layout.setContentsMargins(14, 14, 14, 14)
+        self.container_layout.setSpacing(0)
+        self.container_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        # Quadro unificado com borda estilo lista do GitHub
+        self.prs_frame = QFrame()
+        self.prs_frame.setObjectName("prsContainerFrame")
+        self.cards_layout = QVBoxLayout(self.prs_frame)
+        self.cards_layout.setContentsMargins(0, 0, 0, 0)
+        self.cards_layout.setSpacing(0)
         self.cards_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        self.container_layout.addWidget(self.prs_frame)
 
         # Mensagem de estado vazio ou inicial
         self.empty_label = QLabel("Aguardando carregamento de Pull Requests...")
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.empty_label.setStyleSheet("color: #6c7086; font-size: 14px; padding: 40px;")
+        self.empty_label.setStyleSheet("color: #7d8590; font-size: 14px; padding: 40px;")
         self.cards_layout.addWidget(self.empty_label)
 
         self.scroll_area.setWidget(self.cards_container)
@@ -234,6 +260,9 @@ class PullRequestsView(QWidget):
             lbl.setStyleSheet("color: #6c7086; font-size: 14px; padding: 40px;")
             self.cards_layout.addWidget(lbl)
         else:
-            for pr in filtered:
-                card = PullRequestCard(pr)
+            total_items = len(filtered)
+            for i, pr in enumerate(filtered):
+                is_own = self._is_own_pr(pr)
+                is_last = (i == total_items - 1)
+                card = PullRequestCard(pr, is_own_pr=is_own, is_last=is_last)
                 self.cards_layout.addWidget(card)

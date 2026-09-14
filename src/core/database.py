@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Set
 
-from .models import JiraTaskItem, PullRequestItem
+from .models import JiraTaskItem, NotificationItem, PullRequestItem
 
 
 class DatabaseManager:
@@ -91,6 +91,14 @@ class DatabaseManager:
                 conn.execute("ALTER TABLE pull_requests ADD COLUMN review_decision TEXT")
             except sqlite3.OperationalError:
                 pass
+            try:
+                conn.execute("ALTER TABLE pull_requests ADD COLUMN checks_summary TEXT")
+            except sqlite3.OperationalError:
+                pass
+            try:
+                conn.execute("ALTER TABLE pull_requests ADD COLUMN checks_state TEXT")
+            except sqlite3.OperationalError:
+                pass
 
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS notifications_seen (
@@ -98,6 +106,24 @@ class DatabaseManager:
                     item_type TEXT NOT NULL,
                     first_seen_at TEXT NOT NULL
                 )
+            """)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS notifications (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    item_key TEXT NOT NULL,
+                    item_type TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    link_url TEXT,
+                    created_at TEXT NOT NULL,
+                    is_dismissed INTEGER DEFAULT 0
+                )
+            """)
+
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_notifications_dismissed_created
+                ON notifications (is_dismissed, created_at DESC)
             """)
             conn.commit()
 
@@ -175,8 +201,8 @@ class DatabaseManager:
                     INSERT OR REPLACE INTO pull_requests (
                         id, number, title, repo, author, author_avatar, html_url,
                         created_at, updated_at, is_draft, labels, comments_count,
-                        review_decision, last_synced_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        review_decision, checks_summary, checks_state, last_synced_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     pr.id,
                     pr.number,
@@ -191,6 +217,8 @@ class DatabaseManager:
                     json.dumps(pr.labels),
                     pr.comments_count,
                     pr.review_decision,
+                    getattr(pr, "checks_summary", None),
+                    getattr(pr, "checks_state", None),
                     now_iso
                 ))
             conn.commit()
@@ -209,6 +237,8 @@ class DatabaseManager:
                 review_decision = None
                 if "review_decision" in row.keys():
                     review_decision = row["review_decision"]
+                checks_summary = row["checks_summary"] if "checks_summary" in row.keys() else None
+                checks_state = row["checks_state"] if "checks_state" in row.keys() else None
                 item = PullRequestItem(
                     id=row["id"],
                     number=row["number"],
@@ -222,7 +252,9 @@ class DatabaseManager:
                     is_draft=bool(row["is_draft"]),
                     labels=labels,
                     comments_count=row["comments_count"] or 0,
-                    review_decision=review_decision
+                    review_decision=review_decision,
+                    checks_summary=checks_summary,
+                    checks_state=checks_state
                 )
                 items.append(item)
         return items
@@ -282,3 +314,85 @@ class DatabaseManager:
             conn.commit()
 
         return new_items
+
+    def add_notification(
+        self,
+        item_key: str,
+        item_type: str,
+        title: str,
+        message: str,
+        link_url: Optional[str] = None,
+        created_at: Optional[datetime] = None
+    ) -> NotificationItem:
+        now_dt = created_at or datetime.now(timezone.utc)
+        now_iso = now_dt.isoformat()
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO notifications (item_key, item_type, title, message, link_url, created_at, is_dismissed)
+                VALUES (?, ?, ?, ?, ?, ?, 0)
+                """,
+                (item_key, item_type, title, message, link_url, now_iso)
+            )
+            conn.commit()
+            notif_id = cursor.lastrowid
+            return NotificationItem(
+                id=notif_id,
+                item_key=item_key,
+                item_type=item_type,
+                title=title,
+                message=message,
+                link_url=link_url,
+                created_at=now_dt,
+                is_dismissed=False
+            )
+
+    def get_active_notifications(self) -> List[NotificationItem]:
+        """
+        Retorna todas as notificações não removidas ordenadas da mais nova para a mais antiga.
+        """
+        items: List[NotificationItem] = []
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT id, item_key, item_type, title, message, link_url, created_at, is_dismissed
+                FROM notifications
+                WHERE is_dismissed = 0
+                ORDER BY created_at DESC, id DESC
+                """
+            )
+            for row in cursor.fetchall():
+                created_dt = self._parse_iso(row["created_at"]) or datetime.now(timezone.utc)
+                item = NotificationItem(
+                    id=row["id"],
+                    item_key=row["item_key"],
+                    item_type=row["item_type"],
+                    title=row["title"],
+                    message=row["message"],
+                    link_url=row["link_url"],
+                    created_at=created_dt,
+                    is_dismissed=bool(row["is_dismissed"])
+                )
+                items.append(item)
+        return items
+
+    def dismiss_notification(self, notification_id: int):
+        """
+        Marca uma notificação como removida para que não seja mais exibida.
+        """
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE notifications SET is_dismissed = 1 WHERE id = ?",
+                (notification_id,)
+            )
+            conn.commit()
+
+    def dismiss_all_notifications(self):
+        """
+        Marca todas as notificações ativas como removidas para que não sejam mais exibidas.
+        """
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE notifications SET is_dismissed = 1 WHERE is_dismissed = 0"
+            )
+            conn.commit()
