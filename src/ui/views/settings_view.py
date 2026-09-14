@@ -28,6 +28,8 @@ from ...core.autostart import AutostartManager
 class SettingsView(QWidget):
     settings_saved = pyqtSignal(object)
     test_notification_requested = pyqtSignal()
+    check_updates_requested = pyqtSignal()
+    update_app_requested = pyqtSignal()
 
     def __init__(self, config: AppConfig, parent: QWidget = None):
         super().__init__(parent)
@@ -242,7 +244,40 @@ class SettingsView(QWidget):
 
         layout.addWidget(pref_group)
 
-        # 4. Botão Salvar
+        # 4. Atualizações do Aplicativo (ycetrey/widgets)
+        update_group = QGroupBox("Atualizações do Aplicativo (ycetrey/widgets)")
+        update_group.setStyleSheet("QGroupBox { font-weight: bold; color: #89b4fa; }")
+        update_layout = QVBoxLayout(update_group)
+        update_layout.setSpacing(10)
+
+        self.update_info_lbl = QLabel("Repositório: ycetrey/widgets")
+        self.update_info_lbl.setStyleSheet("color: #a6adc8; font-size: 12px;")
+        update_layout.addWidget(self.update_info_lbl)
+
+        self.update_status_lbl = QLabel("Status: Pronto para verificar novidades.")
+        self.update_status_lbl.setStyleSheet("color: #cdd6f4; font-size: 12px;")
+        update_layout.addWidget(self.update_status_lbl)
+
+        btn_row = QHBoxLayout()
+        self.check_updates_btn = QPushButton("🔍 Verificar Atualizações Agora")
+        self.check_updates_btn.setProperty("class", "actionButton")
+        self.check_updates_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.check_updates_btn.clicked.connect(self.check_updates_requested.emit)
+        btn_row.addWidget(self.check_updates_btn)
+
+        self.apply_update_btn = QPushButton("🔄 Atualizar e Reiniciar")
+        self.apply_update_btn.setProperty("class", "primaryButton")
+        self.apply_update_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.apply_update_btn.setVisible(False)
+        self.apply_update_btn.clicked.connect(self.update_app_requested.emit)
+        btn_row.addWidget(self.apply_update_btn)
+
+        btn_row.addStretch()
+        update_layout.addLayout(btn_row)
+
+        layout.addWidget(update_group)
+
+        # 5. Botão Salvar
         save_layout = QHBoxLayout()
         save_layout.addStretch()
 
@@ -376,3 +411,32 @@ class SettingsView(QWidget):
         )
         self.config = new_config
         self.settings_saved.emit(new_config)
+
+    def set_checking_updates(self, checking: bool):
+        if checking:
+            self.check_updates_btn.setEnabled(False)
+            self.update_status_lbl.setText("⏳ Verificando atualizações no GitHub...")
+            self.update_status_lbl.setStyleSheet("color: #89b4fa; font-size: 12px;")
+        else:
+            self.check_updates_btn.setEnabled(True)
+
+    def set_update_status(self, info):
+        self.set_checking_updates(False)
+        if not info:
+            return
+        branch_str = getattr(info, "branch", "main")
+        commit_str = getattr(info, "current_commit", "")
+        self.update_info_lbl.setText(f"Repositório: ycetrey/widgets | Branch: {branch_str} | Commit: {commit_str}")
+        if info.available:
+            commit_text = "commit novo" if info.commits_behind == 1 else "commits novos"
+            self.update_status_lbl.setText(f"🚀 Nova versão encontrada! ({info.commits_behind} {commit_text} disponíveis no GitHub)")
+            self.update_status_lbl.setStyleSheet("color: #a6e3a1; font-size: 12px; font-weight: bold;")
+            self.apply_update_btn.setVisible(True)
+        elif info.error:
+            self.update_status_lbl.setText(f"⚠️ {info.error}")
+            self.update_status_lbl.setStyleSheet("color: #f38ba8; font-size: 12px;")
+            self.apply_update_btn.setVisible(False)
+        else:
+            self.update_status_lbl.setText("✅ O aplicativo já está na versão mais recente.")
+            self.update_status_lbl.setStyleSheet("color: #a6e3a1; font-size: 12px;")
+            self.apply_update_btn.setVisible(False)

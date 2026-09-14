@@ -17,6 +17,7 @@ from ...core.models import NotificationItem
 
 class NotificationCard(QFrame):
     dismiss_clicked = pyqtSignal(int)
+    update_clicked = pyqtSignal()
 
     def __init__(self, notification: NotificationItem, is_last: bool = False, parent: QWidget = None):
         super().__init__(parent)
@@ -64,6 +65,14 @@ class NotificationCard(QFrame):
                 border-radius: 18px;
                 font-size: 16px;
             """)
+        elif self.notification.item_type == "update":
+            icon_label.setText("🚀")
+            icon_label.setStyleSheet("""
+                background-color: rgba(56, 189, 248, 0.15);
+                border: 1px solid rgba(56, 189, 248, 0.4);
+                border-radius: 18px;
+                font-size: 16px;
+            """)
         else:
             icon_label.setText("🔔")
             icon_label.setStyleSheet("""
@@ -101,8 +110,31 @@ class NotificationCard(QFrame):
         msg_lbl.setStyleSheet("color: #a6adc8; font-size: 12px; line-height: 1.3;")
         content_layout.addWidget(msg_lbl)
 
-        # Link de ação direta se houver url associada
-        if self.notification.link_url:
+        # Ações específicas por tipo
+        if self.notification.item_type == "update":
+            action_layout = QHBoxLayout()
+            action_layout.setSpacing(6)
+            update_btn = QPushButton("🔄 Atualizar e Reiniciar")
+            update_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            update_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #3b82f6;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 4px 10px;
+                    font-size: 11px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #2563eb;
+                }
+            """)
+            update_btn.clicked.connect(self.update_clicked.emit)
+            action_layout.addWidget(update_btn)
+            action_layout.addStretch()
+            content_layout.addLayout(action_layout)
+        elif self.notification.link_url:
             link_layout = QHBoxLayout()
             link_layout.setSpacing(6)
 

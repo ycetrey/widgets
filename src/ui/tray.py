@@ -12,6 +12,7 @@ class SystemTrayManager(QSystemTrayIcon):
     refresh_requested = pyqtSignal()
     open_settings_requested = pyqtSignal()
     quit_requested = pyqtSignal()
+    update_requested = pyqtSignal()
 
     def __init__(self, icon_path: str, parent: QWidget = None):
         super().__init__(parent)
@@ -34,6 +35,13 @@ class SystemTrayManager(QSystemTrayIcon):
             "QMenu::item:selected { background-color: #3b82f6; color: white; }"
         )
 
+        self.update_action = QAction("🚀 Atualização Disponível", self)
+        self.update_action.triggered.connect(self.update_requested.emit)
+        self.update_action.setVisible(False)
+        menu.addAction(self.update_action)
+        self.update_separator = menu.addSeparator()
+        self.update_separator.setVisible(False)
+
         show_action = QAction("🪟 Mostrar / Ocultar Janela", self)
         show_action.triggered.connect(self.toggle_window_requested.emit)
         menu.addAction(show_action)
@@ -53,6 +61,17 @@ class SystemTrayManager(QSystemTrayIcon):
         menu.addAction(quit_action)
 
         self.setContextMenu(menu)
+
+    def set_update_available(self, available: bool, commit_count: int = 0):
+        """Exibe ou oculta a ação de atualização no menu de contexto da bandeja."""
+        if available:
+            commits_str = f"({commit_count} novo{'s' if commit_count > 1 else ''})" if commit_count > 0 else ""
+            self.update_action.setText(f"🚀 Atualizar Widget {commits_str}".strip())
+            self.update_action.setVisible(True)
+            self.update_separator.setVisible(True)
+        else:
+            self.update_action.setVisible(False)
+            self.update_separator.setVisible(False)
 
     def _on_activated(self, reason):
         # Clique com o botão esquerdo ou duplo clique alterna visibilidade da janela

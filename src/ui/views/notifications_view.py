@@ -21,6 +21,7 @@ from ..widgets.notification_card import NotificationCard
 class NotificationsView(QWidget):
     dismiss_one_requested = pyqtSignal(int)
     clear_all_requested = pyqtSignal()
+    update_requested = pyqtSignal()
 
     def __init__(self, parent: QWidget = None):
         super().__init__(parent)
@@ -124,4 +125,5 @@ class NotificationsView(QWidget):
                 is_last = (i == total - 1)
                 card = NotificationCard(notif, is_last=is_last, parent=self.container)
                 card.dismiss_clicked.connect(self.dismiss_one_requested.emit)
+                card.update_clicked.connect(self.update_requested.emit)
                 self.cards_layout.addWidget(card)

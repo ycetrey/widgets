@@ -150,3 +150,38 @@ class DesktopNotifier:
             msg = f"{len(new_tasks)} novas tarefas atribuídas a você: {keys_str}..."
             self.notify(title, msg, urgency="normal")
 
+    def notify_update(self, update_info, on_update_callback=None):
+        """
+        Dispara notificação nativa avisando sobre nova versão do Dev Status Widget no GitHub.
+        Se suportado pelo sistema, adiciona botão de ação interativo para atualizar e reiniciar.
+        """
+        commits_str = f"{update_info.commits_behind} novo(s) commit(s)" if update_info.commits_behind > 0 else "novos commits"
+        title = "🚀 Atualização Disponível!"
+        message = f"Há {commits_str} no GitHub (branch {update_info.branch}).\nClique para atualizar e reiniciar."
+        self.play_sound()
+
+        if self._notify_send_available and on_update_callback:
+            def _wait_action():
+                try:
+                    cmd = [
+                        "notify-send",
+                        "-a", "Dev Status Widget",
+                        "-u", "normal",
+                        "-A", "update=Atualizar e Reiniciar"
+                    ]
+                    if self.icon_path and os.path.exists(self.icon_path):
+                        cmd.extend(["-i", self.icon_path])
+                    cmd.extend([title, message])
+                    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+                    out, _ = proc.communicate(timeout=60)
+                    if out and "update" in out.strip():
+                        from PyQt6.QtCore import QTimer
+                        QTimer.singleShot(0, on_update_callback)
+                except Exception as e:
+                    print(f"[Notifier] Erro na notificação interativa de update: {e}")
+
+            import threading
+            threading.Thread(target=_wait_action, daemon=True).start()
+        else:
+            self.notify(title, message, urgency="normal")
+
