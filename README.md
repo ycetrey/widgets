@@ -4,6 +4,35 @@ Um aplicativo/widget desktop leve e moderno para Linux Debian (GNOME) com navega
 
 ---
 
+## 📸 Demonstração Visual
+
+### 🔀 1. Pull Requests & Alerta de Atualização
+Visualização unificada de PRs com badges de urgência por tempo em aberto, status de revisão, checks do CI e o banner interativo de atualização disponível:
+
+![Pull Requests](assets/screenshots/01_pull_requests.png)
+
+### 📋 2. Jira Tarefas (Visão Kanban)
+Acompanhamento em tempo real das tarefas atribuídas no Jira, organizadas em colunas por status, prioridades e subtarefas:
+
+![Jira Tarefas](assets/screenshots/02_jira_tarefas.png)
+
+### 🔔 3. Histórico de Notificações
+Central com histórico de alertas de PRs, Jira e avisos de versão, com botão direto para atualizar e reiniciar o programa:
+
+![Notificações](assets/screenshots/03_notificacoes.png)
+
+### ⚙️ 4. Configurações — Repositórios & Autenticação
+Gerenciamento de repositórios monitorados e token de acesso pessoal com exibição mascarada e segura:
+
+![Configurações - Repositórios e Autenticação](assets/screenshots/04_configuracoes_repos_auth.png)
+
+### 🚀 5. Configurações — Preferências & Atualizações
+Controle de notificações, sons, inicialização com o sistema (autostart) e verificação de atualizações do repositório (`ycetrey/widgets`):
+
+![Configurações - Preferências e Atualizações](assets/screenshots/05_configuracoes_preferencias_updates.png)
+
+---
+
 ## ✨ Funcionalidades
 
 - **Navegação por Abas/Botões**:
@@ -11,6 +40,12 @@ Um aplicativo/widget desktop leve e moderno para Linux Debian (GNOME) com navega
   - **📋 Jira Tarefas**: Visualização das suas tarefas atribuídas no Jira, com status, prioridades, tempo de atualização e link direto para a issue.
   - **🔔 Notificações**: Coluna com histórico de todas as notificações exibidas (ordenadas da mais nova para a mais antiga), com opção de remover item a item [✕] ou botão "Limpar tudo", com persistência garantida no SQLite para não reexibir itens descartados.
   - **⚙️ Configurações**: Interface gráfica completa para gerenciar repositórios, token do GitHub, credenciais do Jira, intervalo de atualização e notificações sem precisar editar arquivos manuais.
+- **🚀 Detecção Automática de Atualizações & Auto-Update (`git pull`)**:
+  - Detecção inteligente em segundo plano de novos commits no GitHub (`ycetrey/widgets`).
+  - Banner interativo no topo da janela exibindo o resumo de novidades e o botão `[ 🔄 Atualizar e Reiniciar ]`.
+  - Notificação nativa interativa no GNOME Desktop (`notify-send -A`).
+  - Ação dinâmica no menu do ícone da bandeja do sistema (System Tray).
+  - Execução segura de `git pull` com checagem prévia de arquivos modificados localmente e reinicialização desacoplada do aplicativo.
 - **Ordenação por Data (Mais antiga para a mais recente)**:
   - Exibe no topo as PRs que estão aguardando revisão há mais tempo (`created_at ASC`).
   - Badges coloridos de urgência baseados no tempo em aberto:
@@ -21,7 +56,7 @@ Um aplicativo/widget desktop leve e moderno para Linux Debian (GNOME) com navega
   - Botão de alternância rápida caso queira inverter a ordenação.
 - **Notificações Desktop Nativas (GNOME)**:
   - Monitoramento em segundo plano.
-  - Ao detectar novas PRs, emite uma notificação nativa no GNOME (`notify-send` / FreeDesktop Notification).
+  - Ao detectar novas PRs ou atualizações, emite uma notificação nativa no GNOME (`notify-send` / FreeDesktop Notification).
 - **Ícone na Bandeja do Sistema (System Tray / Top Bar)**:
   - Contador de PRs no tooltip.
   - Clique com botão esquerdo para mostrar/ocultar a janela rapidamente.
