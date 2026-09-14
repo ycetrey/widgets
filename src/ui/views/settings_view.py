@@ -4,6 +4,7 @@ Visualização da aba de Configurações do aplicativo.
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QFrame,
     QGridLayout,
@@ -104,8 +105,40 @@ class SettingsView(QWidget):
         self.toggle_token_btn.setProperty("class", "actionButton")
         self.toggle_token_btn.clicked.connect(self._toggle_token_visibility)
         token_input_layout.addWidget(self.toggle_token_btn)
-
         token_layout.addLayout(token_input_layout)
+
+        # Campo Usuário GitHub
+        user_row = QHBoxLayout()
+        user_lbl = QLabel("Seu Usuário GitHub:")
+        user_lbl.setStyleSheet("color: #cdd6f4;")
+        self.username_input = QLineEdit()
+        self.username_input.setPlaceholderText("Ex: gustavo-bertoglio (autodetectado via token)")
+        user_row.addWidget(user_lbl)
+        user_row.addWidget(self.username_input)
+        token_layout.addLayout(user_row)
+
+        user_desc = QLabel(
+            "Usado para destacar em azul as PRs de sua autoria ('Minha PR'). "
+            "Se você preencher o token acima, o usuário pode ser detectado automaticamente."
+        )
+        user_desc.setWordWrap(True)
+        user_desc.setStyleSheet("color: #a6adc8; font-size: 11px;")
+        token_layout.addWidget(user_desc)
+
+        # Botão de validação de token e detecção de usuário
+        val_row = QHBoxLayout()
+        self.validate_token_btn = QPushButton("🔍 Validar Token e Detectar Usuário")
+        self.validate_token_btn.setProperty("class", "actionButton")
+        self.validate_token_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.validate_token_btn.clicked.connect(self._validate_github_token)
+        val_row.addWidget(self.validate_token_btn)
+
+        self.token_status_lbl = QLabel("")
+        self.token_status_lbl.setStyleSheet("font-size: 11px;")
+        val_row.addWidget(self.token_status_lbl)
+        val_row.addStretch()
+        token_layout.addLayout(val_row)
+
         layout.addWidget(token_group)
 
         # 3. Integração com o Jira
@@ -232,6 +265,7 @@ class SettingsView(QWidget):
             self.repo_list.addItem(QListWidgetItem(repo))
 
         self.token_input.setText(config.github_token)
+        self.username_input.setText(config.github_username)
         self.interval_spin.setValue(config.refresh_interval_minutes)
         self.notify_check.setChecked(config.notifications_enabled)
         self.sound_check.setChecked(config.sound_enabled)
@@ -277,13 +311,53 @@ class SettingsView(QWidget):
             self.jira_token_input.setEchoMode(QLineEdit.EchoMode.Password)
             self.toggle_jira_token_btn.setText("👁️")
 
+    def _validate_github_token(self):
+        token = self.token_input.text().strip()
+        if not token:
+            self.token_status_lbl.setText("⚠️ Informe um token para validar.")
+            self.token_status_lbl.setStyleSheet("color: #f9e2af; font-size: 11px;")
+            return
+
+        self.token_status_lbl.setText("⏳ Validando...")
+        self.token_status_lbl.setStyleSheet("color: #89b4fa; font-size: 11px;")
+        QApplication.processEvents()
+
+        try:
+            from ...providers.github_provider import GitHubProvider
+            login = GitHubProvider.validate_token(token)
+            if login:
+                self.username_input.setText(login)
+                self.token_status_lbl.setText(f"✅ Válido! Usuário detectado: @{login}")
+                self.token_status_lbl.setStyleSheet("color: #a6e3a1; font-size: 11px; font-weight: bold;")
+            else:
+                self.token_status_lbl.setText("❌ Token inválido ou não autenticado.")
+                self.token_status_lbl.setStyleSheet("color: #f38ba8; font-size: 11px;")
+        except Exception as e:
+            self.token_status_lbl.setText(f"❌ Erro ao validar: {e}")
+            self.token_status_lbl.setStyleSheet("color: #f38ba8; font-size: 11px;")
+
     def _save(self):
         autostart_enabled = self.autostart_check.isChecked()
         AutostartManager.set_enabled(autostart_enabled)
 
         repos = [self.repo_list.item(i).text() for i in range(self.repo_list.count())]
+        username = self.username_input.text().strip()
+        token = self.token_input.text().strip()
+
+        # Se não informou usuário mas forneceu token, tenta autodetectar silenciosamente
+        if not username and token:
+            try:
+                from ...providers.github_provider import GitHubProvider
+                detected = GitHubProvider.validate_token(token)
+                if detected:
+                    username = detected
+                    self.username_input.setText(detected)
+            except Exception:
+                pass
+
         new_config = AppConfig(
-            github_token=self.token_input.text().strip(),
+            github_token=token,
+            github_username=username,
             repositories=repos,
             refresh_interval_minutes=self.interval_spin.value(),
             sort_order=self.config.sort_order,

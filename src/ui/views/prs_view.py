@@ -24,16 +24,16 @@ class PullRequestsView(QWidget):
     refresh_requested = pyqtSignal()
     sort_changed = pyqtSignal(str)
 
-    def __init__(self, sort_order: str = "oldest_first", current_user: str = "antonio-fiscalmax", parent: QWidget = None):
+    def __init__(self, sort_order: str = "oldest_first", current_user: str = "", parent: QWidget = None):
         super().__init__(parent)
         self.all_prs: List[PullRequestItem] = []
         self.current_sort_order = sort_order  # "oldest_first" ou "newest_first"
-        self.current_user = current_user.strip() if current_user else "antonio-fiscalmax"
+        self.current_user = current_user.strip() if current_user else ""
         self._init_ui()
 
     def set_current_user(self, username: str):
         cleaned = username.strip() if username else ""
-        if cleaned and cleaned != self.current_user:
+        if cleaned != self.current_user:
             self.current_user = cleaned
             self._apply_filters()
 
@@ -42,7 +42,7 @@ class PullRequestsView(QWidget):
             return False
         user = self.current_user.lower()
         author = pr.author.lower()
-        return author == user or (user and author in (user, "voce", "antonio-fiscalmax"))
+        return author == user
 
     def _init_ui(self):
         root_layout = QVBoxLayout(self)

@@ -5,6 +5,10 @@
 # Como gerar: https://github.com/settings/tokens (Permissão necessária: 'repo' ou 'public_repo')
 github_token: ""
 
+# Seu nome de usuário no GitHub (usado para destacar em azul as PRs de sua autoria)
+# Pode ser informado manualmente ou autodetectado automaticamente a partir do token
+github_username: ""
+
 # Lista de repositórios para monitorar no formato "dono/repositorio"
 repositories:
   - "facebook/react"

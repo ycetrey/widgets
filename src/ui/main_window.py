@@ -186,7 +186,7 @@ class MainWindow(QMainWindow):
         # View 0: Pull Requests
         self.prs_view = PullRequestsView(
             sort_order=self.config.sort_order,
-            current_user=self.config.github_username or "antonio-fiscalmax"
+            current_user=self.config.github_username
         )
         self.prs_view.refresh_requested.connect(self.start_fetch)
         self.prs_view.sort_changed.connect(self._on_sort_changed)
@@ -256,8 +256,11 @@ class MainWindow(QMainWindow):
             self.github_provider.update_config(
                 token=new_config.github_token,
                 repositories=new_config.repositories,
-                sort_order=new_config.sort_order
+                sort_order=new_config.sort_order,
+                github_username=new_config.github_username
             )
+
+        self.prs_view.set_current_user(new_config.github_username)
 
         if hasattr(self.jira_provider, "update_config"):
             self.jira_provider.update_config(
@@ -354,6 +357,9 @@ class MainWindow(QMainWindow):
         current_user = pr_res.get("current_user") or self.config.github_username
         if current_user:
             self.prs_view.set_current_user(current_user)
+            if not self.config.github_username:
+                self.config.github_username = current_user
+                self.config_manager.save(self.config)
 
         jira_items = jira_res.get("items", [])
         jira_new = jira_res.get("new_items", [])

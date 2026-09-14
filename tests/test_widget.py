@@ -256,6 +256,28 @@ class TestPullRequestsView(unittest.TestCase):
         lbl = view.cards_layout.itemAt(0).widget()
         self.assertIn("Nenhuma PR encontrada", lbl.text())
 
+    def test_own_pr_identification(self):
+        from src.ui.views.prs_view import PullRequestsView
+        now = datetime.now(timezone.utc)
+        view = PullRequestsView(current_user="gustavo-bertoglio")
+
+        pr_gustavo = PullRequestItem(
+            id=1, number=1, title="PR Gustavo", repo="org/repo",
+            author="gustavo-bertoglio", author_avatar="", html_url="url1", created_at=now
+        )
+        pr_antonio = PullRequestItem(
+            id=2, number=2, title="PR Antonio", repo="org/repo",
+            author="antonio-fiscalmax", author_avatar="", html_url="url2", created_at=now
+        )
+
+        self.assertTrue(view._is_own_pr(pr_gustavo))
+        self.assertFalse(view._is_own_pr(pr_antonio))
+
+        # Altera usuário dinamicamente
+        view.set_current_user("antonio-fiscalmax")
+        self.assertFalse(view._is_own_pr(pr_gustavo))
+        self.assertTrue(view._is_own_pr(pr_antonio))
+
 
 if __name__ == "__main__":
     unittest.main()

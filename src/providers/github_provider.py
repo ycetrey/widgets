@@ -21,12 +21,33 @@ class GitHubProvider(BaseStatusProvider):
         self._known_pr_urls: Set[str] = set()
         self._is_first_run: bool = True
 
+    @classmethod
+    def validate_token(cls, token: str) -> Optional[str]:
+        """
+        Valida o token na API do GitHub e retorna o nome de usuário (login) caso seja válido.
+        Retorna None se o token for inválido ou não autenticado.
+        """
+        if not token or not token.strip():
+            return None
+        try:
+            headers = {
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token.strip()}",
+                "User-Agent": "DevStatusWidget-Debian/1.0"
+            }
+            res = requests.get(f"{cls.API_BASE}/user", headers=headers, timeout=5)
+            if res.status_code == 200:
+                data = res.json()
+                return data.get("login")
+        except Exception:
+            pass
+        return None
+
     def update_config(self, token: str, repositories: List[str], sort_order: str = "oldest_first", github_username: str = ""):
         self.token = token.strip() if token else ""
         self.repositories = repositories
         self.sort_order = sort_order
-        if github_username:
-            self.current_user = github_username.strip()
+        self.current_user = github_username.strip()
 
     def _get_headers(self) -> Dict[str, str]:
         headers = {
