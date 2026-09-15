@@ -26,6 +26,7 @@ from ..core.notifier import DesktopNotifier
 from ..core.updater import GitUpdater, UpdateInfo
 from ..providers.github_provider import GitHubProvider
 from ..providers.jira_provider import JiraProvider
+from .dock_badge import DockBadgeManager
 from .tray import SystemTrayManager
 from .views.jira_view import JiraView
 from .views.notifications_view import NotificationsView
@@ -132,6 +133,9 @@ class MainWindow(QMainWindow):
         # Tray
         self.tray = SystemTrayManager(icon_path=self.icon_path, parent=self)
         self.notifier.set_tray_icon(self.tray)
+
+        # Dock Badge (GNOME Dock / Dash to Dock)
+        self.dock_badge = DockBadgeManager()
 
         self._init_ui()
         self._setup_tray_connections()
@@ -325,7 +329,9 @@ class MainWindow(QMainWindow):
         try:
             active_notifs = self.db.get_active_notifications()
             self.notifications_view.set_notifications(active_notifs)
-            self.tab_notifications.set_count(len(active_notifs))
+            count = len(active_notifs)
+            self.tab_notifications.set_count(count)
+            self.dock_badge.set_count(count)
         except Exception as e:
             print(f"[Database] Erro ao recarregar notificações: {e}")
 
@@ -633,6 +639,8 @@ class MainWindow(QMainWindow):
             self.quit_app()
 
     def quit_app(self):
+        if hasattr(self, "dock_badge"):
+            self.dock_badge.clear()
         self.tray.hide()
         self.refresh_timer.stop()
         if self.thread and self.thread.isRunning():

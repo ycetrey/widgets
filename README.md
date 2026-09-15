@@ -62,6 +62,9 @@ Controle de notificações, sons, inicialização com o sistema (autostart) e ve
   - Clique com botão esquerdo para mostrar/ocultar a janela rapidamente.
   - Menu de contexto com botão direito: *Atualizar Agora*, *Configurações*, *Sair*.
   - Ao clicar no "X" (fechar) da janela, o widget minimiza para a bandeja e continua rodando em segundo plano.
+- **Badge Numérico no Dock do GNOME (Ubuntu Dock / Dash to Dock)**:
+  - Exibe o contador de notificações ativas (estilo Rocket.Chat / Slack) diretamente sobre o ícone do aplicativo no dock lateral via integração nativa D-Bus (`com.canonical.Unity.LauncherEntry`).
+  - Sincronização em tempo real: incrementa com novas notificações (PRs, Jira, Atualizações) e é removido automaticamente ao descartá-las ou limpá-las.
 - **Inicialização Automática com o Sistema (Autostart)**:
   - Inicia silenciosamente em segundo plano (minimizado na bandeja) ao fazer login no Debian/GNOME.
   - Pode ser ativado ou desativado com um clique na aba de Configurações ou configurado via XDG Autostart padrão (`~/.config/autostart/dev-status-widget.desktop`).
