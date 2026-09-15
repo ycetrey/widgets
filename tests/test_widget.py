@@ -278,6 +278,87 @@ class TestPullRequestsView(unittest.TestCase):
         self.assertFalse(view._is_own_pr(pr_gustavo))
         self.assertTrue(view._is_own_pr(pr_antonio))
 
+    def test_pr_card_fixed_height(self):
+        from src.ui.widgets.pr_card import PullRequestCard
+        now = datetime.now(timezone.utc)
+        pr = PullRequestItem(
+            id=1, number=10, title="PR Teste Altura Fixa", repo="org/repo",
+            author="dev", author_avatar="", html_url="url1", created_at=now
+        )
+        card = PullRequestCard(pr)
+        self.assertEqual(card.minimumHeight(), 67)
+        self.assertEqual(card.maximumHeight(), 67)
+
+    def test_scroll_area_scrollbar_activation_when_exceeding_screen(self):
+        from src.ui.views.prs_view import PullRequestsView
+        now = datetime.now(timezone.utc)
+        view = PullRequestsView()
+        view.resize(800, 450)
+        view.show()
+
+        prs = [
+            PullRequestItem(
+                id=i, number=100 + i, title=f"PR {i}", repo="org/repo",
+                author="dev", author_avatar="", html_url=f"url{i}", created_at=now
+            )
+            for i in range(15)
+        ]
+        view.update_prs(prs)
+        self.app.processEvents()
+
+        # Com 15 cards de 67px (total ~1000px), a barra de rolagem deve ter alcance positivo
+        v_bar = view.scroll_area.verticalScrollBar()
+        self.assertGreater(v_bar.maximum(), 0)
+
+        # Ao filtrar para apenas 1 item (não ultrapassa a tela), alcance deve ser 0
+        view.search_input.setText("PR 14")
+        self.app.processEvents()
+        self.assertEqual(v_bar.maximum(), 0)
+
+        # Ao limpar o filtro (volta a 15 itens), alcance deve ser positivo novamente
+        view.search_input.clear()
+        self.app.processEvents()
+        self.assertGreater(v_bar.maximum(), 0)
+
+    def test_pr_cards_not_stretching_with_few_items(self):
+        from src.ui.views.prs_view import PullRequestsView
+        now = datetime.now(timezone.utc)
+        view = PullRequestsView()
+        view.resize(1200, 800)
+        view.show()
+
+        # 2 itens: devem ter exatamente 67px cada e o frame total 134px
+        prs2 = [
+            PullRequestItem(
+                id=i, number=100 + i, title=f"PR {i}", repo="org/repo",
+                author="dev", author_avatar="", html_url=f"url{i}", created_at=now
+            )
+            for i in range(2)
+        ]
+        view.update_prs(prs2)
+        self.app.processEvents()
+
+        self.assertEqual(view.prs_frame.height(), 134)
+        for i in range(view.cards_layout.count()):
+            card = view.cards_layout.itemAt(i).widget()
+            self.assertEqual(card.height(), 67)
+
+        # 7 itens: devem ter exatamente 67px cada e o frame total 469px
+        prs7 = [
+            PullRequestItem(
+                id=i, number=200 + i, title=f"PR {i}", repo="org/repo",
+                author="dev", author_avatar="", html_url=f"url{i}", created_at=now
+            )
+            for i in range(7)
+        ]
+        view.update_prs(prs7)
+        self.app.processEvents()
+
+        self.assertEqual(view.prs_frame.height(), 469)
+        for i in range(view.cards_layout.count()):
+            card = view.cards_layout.itemAt(i).widget()
+            self.assertEqual(card.height(), 67)
+
 
 if __name__ == "__main__":
     unittest.main()

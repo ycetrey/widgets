@@ -79,11 +79,12 @@ class PullRequestCard(QFrame):
         self.setProperty("isLast", "true" if is_last else "false")
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.setToolTip(f"Abrir PR #{self.pr.number} no GitHub\n{self.pr.html_url}")
+        self.setFixedHeight(67)
         self._init_ui()
 
     def _init_ui(self):
         main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(14, 10, 14, 10)
+        main_layout.setContentsMargins(16, 11, 16, 11)
         main_layout.setSpacing(12)
 
         # 1. Ícone da PR à esquerda (Verde se aberta, Cinza se draft)
@@ -105,6 +106,7 @@ class PullRequestCard(QFrame):
         content_layout = QVBoxLayout()
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(4)
+        content_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         # Linha 1: Título + Badge azul do repositório
         top_line = QHBoxLayout()
@@ -114,12 +116,13 @@ class PullRequestCard(QFrame):
         title_label = QLabel(self.pr.title)
         title_label.setProperty("class", "prTitle")
         title_label.setStyleSheet("color: #e6edf3; font-weight: 600; font-size: 14px;")
-        title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         top_line.addWidget(title_label)
 
         # Badgezinho azul discreto com o repositório
         repo_badge = QLabel(self.pr.repo)
         repo_badge.setProperty("class", "repoBadgeBlue")
+        repo_badge.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         top_line.addWidget(repo_badge)
 
         top_line.addStretch()

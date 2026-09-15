@@ -122,7 +122,17 @@ QFrame#prsContainerFrame {
 }
 
 /* Linha de Pull Request individual (GitHub List Row) */
-QFrame.prRow, QFrame[class="prRow"], QFrame.prCard, QFrame[class="prCard"] {
+QFrame.prRow, QFrame[class="prRow"] {
+    background-color: #161b22;
+    border: none;
+    border-bottom: 1px solid #30363d;
+    border-left: 3px solid transparent;
+    padding: 0px;
+    max-height: 67px;
+    min-height: 67px;
+}
+
+QFrame.prCard, QFrame[class="prCard"] {
     background-color: #161b22;
     border: none;
     border-bottom: 1px solid #30363d;

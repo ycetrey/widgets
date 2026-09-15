@@ -112,6 +112,8 @@ class PullRequestsView(QWidget):
         # 3. Área Rolável com a lista de PRs
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.scroll_area.setObjectName("prsScrollArea")
 
         self.cards_container = QWidget()
@@ -129,7 +131,7 @@ class PullRequestsView(QWidget):
         self.cards_layout.setSpacing(0)
         self.cards_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        self.container_layout.addWidget(self.prs_frame)
+        self.container_layout.addWidget(self.prs_frame, alignment=Qt.AlignmentFlag.AlignTop)
 
         # Mensagem de estado vazio ou inicial
         self.empty_label = QLabel("Aguardando carregamento de Pull Requests...")
@@ -224,6 +226,7 @@ class PullRequestsView(QWidget):
             item = self.cards_layout.takeAt(0)
             widget = item.widget()
             if widget:
+                widget.setParent(None)
                 widget.deleteLater()
 
         selected_repo = self.repo_combo.currentData()
@@ -259,10 +262,14 @@ class PullRequestsView(QWidget):
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lbl.setStyleSheet("color: #6c7086; font-size: 14px; padding: 40px;")
             self.cards_layout.addWidget(lbl)
+            lbl.show()
         else:
             total_items = len(filtered)
             for i, pr in enumerate(filtered):
                 is_own = self._is_own_pr(pr)
                 is_last = (i == total_items - 1)
-                card = PullRequestCard(pr, is_own_pr=is_own, is_last=is_last)
+                card = PullRequestCard(pr, is_own_pr=is_own, is_last=is_last, parent=self.prs_frame)
                 self.cards_layout.addWidget(card)
+                card.show()
+
+        self.cards_container.adjustSize()
