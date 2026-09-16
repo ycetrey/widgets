@@ -255,7 +255,7 @@ class AppConfig:
     jira_url: str = ""
     jira_email: str = ""
     jira_api_token: str = ""
-    jira_jql: str = "sprint in openSprints() AND (assignee = currentUser() OR assignee is EMPTY) ORDER BY updated DESC"
+    jira_jql: str = "sprint in openSprints() AND (assignee = currentUser() OR assignee is EMPTY) AND issuetype not in subtaskIssueTypes() ORDER BY updated DESC"
 
     # Inicialização Automática no Sistema (Debian/Linux)
     autostart: bool = False

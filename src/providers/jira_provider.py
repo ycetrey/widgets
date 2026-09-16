@@ -11,7 +11,7 @@ from .base import BaseStatusProvider
 
 
 class JiraProvider(BaseStatusProvider):
-    DEFAULT_JQL = "sprint in openSprints() AND (assignee = currentUser() OR assignee is EMPTY) ORDER BY updated DESC"
+    DEFAULT_JQL = "sprint in openSprints() AND (assignee = currentUser() OR assignee is EMPTY) AND issuetype not in subtaskIssueTypes() ORDER BY updated DESC"
 
     def __init__(
         self,
@@ -26,6 +26,7 @@ class JiraProvider(BaseStatusProvider):
         self.api_token = api_token.strip() if api_token else ""
         self.jql = jql.strip() if jql else self.DEFAULT_JQL
         self.demo_mode = demo_mode
+        self.current_user_name: Optional[str] = None
         self._known_keys: Set[str] = set()
         self._is_first_run: bool = True
         self._demo_cycle: int = 0
@@ -133,6 +134,9 @@ class JiraProvider(BaseStatusProvider):
 
                     assignee_obj = fields.get("assignee") or {}
                     assignee_name = assignee_obj.get("displayName") or "Não atribuído"
+                    assignee_email = (assignee_obj.get("emailAddress") or "").strip().lower()
+                    if self.email and assignee_email and assignee_email == self.email.lower():
+                        self.current_user_name = assignee_name
                     assignee_avatar = ((assignee_obj.get("avatarUrls") or {}).get("48x48")) or ""
 
                     parent_obj = fields.get("parent") or {}
@@ -236,7 +240,8 @@ class JiraProvider(BaseStatusProvider):
                 return {
                     "items": items,
                     "new_items": new_items,
-                    "errors": []
+                    "errors": [],
+                    "current_user_name": self.current_user_name
                 }
             elif resp.status_code == 401:
                 return {

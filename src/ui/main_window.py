@@ -431,7 +431,8 @@ class MainWindow(QMainWindow):
             self.prs_view.set_error_message(None)
 
         # 2. Atualiza visualização do Jira
-        self.jira_view.update_tasks(jira_items)
+        jira_user = jira_res.get("current_user_name")
+        self.jira_view.update_tasks(jira_items, current_user_name=jira_user)
         self.tab_jira.set_count(len(jira_items))
         if jira_errors:
             self.jira_view.set_error_message(" | ".join(jira_errors))

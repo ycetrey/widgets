@@ -192,7 +192,7 @@ class SettingsView(QWidget):
         # JQL
         jira_form.addWidget(QLabel("Filtro JQL:"), 3, 0)
         self.jira_jql_input = QLineEdit()
-        self.jira_jql_input.setPlaceholderText("assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC")
+        self.jira_jql_input.setPlaceholderText("sprint in openSprints() AND (assignee = currentUser() OR assignee is EMPTY) AND issuetype not in subtaskIssueTypes() ORDER BY updated DESC")
         jira_form.addWidget(self.jira_jql_input, 3, 1, 1, 2)
 
         jira_layout.addLayout(jira_form)
@@ -406,7 +406,7 @@ class SettingsView(QWidget):
             jira_url=self.jira_url_input.text().strip(),
             jira_email=self.jira_email_input.text().strip(),
             jira_api_token=self.jira_token_input.text().strip(),
-            jira_jql=self.jira_jql_input.text().strip() or "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC",
+            jira_jql=self.jira_jql_input.text().strip() or "sprint in openSprints() AND (assignee = currentUser() OR assignee is EMPTY) AND issuetype not in subtaskIssueTypes() ORDER BY updated DESC",
             autostart=autostart_enabled
         )
         self.config = new_config

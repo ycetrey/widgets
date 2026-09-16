@@ -11,6 +11,11 @@ from .models import AppConfig
 class ConfigManager:
     APP_DIR_NAME = "dev-status-widget"
     DEFAULT_FILENAME = "config.yaml"
+    DEFAULT_JIRA_JQL = "sprint in openSprints() AND (assignee = currentUser() OR assignee is EMPTY) AND issuetype not in subtaskIssueTypes() ORDER BY updated DESC"
+    LEGACY_DEFAULT_JIRA_JQLS = [
+        "sprint in openSprints() AND (assignee = currentUser() OR assignee is EMPTY) ORDER BY updated DESC",
+        "assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC"
+    ]
 
     def __init__(self, custom_path: Optional[str] = None):
         self.custom_path = custom_path
@@ -56,6 +61,12 @@ class ConfigManager:
             with open(self._config_file, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
 
+            raw_jira_jql = str(data.get("jira_jql") or "").strip()
+            if not raw_jira_jql or raw_jira_jql in self.LEGACY_DEFAULT_JIRA_JQLS:
+                resolved_jira_jql = self.DEFAULT_JIRA_JQL
+            else:
+                resolved_jira_jql = raw_jira_jql
+
             return AppConfig(
                 github_token=str(data.get("github_token") or "").strip(),
                 github_username=str(data.get("github_username") or "").strip(),
@@ -72,7 +83,7 @@ class ConfigManager:
                 jira_url=str(data.get("jira_url") or "").strip(),
                 jira_email=str(data.get("jira_email") or "").strip(),
                 jira_api_token=str(data.get("jira_api_token") or "").strip(),
-                jira_jql=str(data.get("jira_jql") or "sprint in openSprints() AND (assignee = currentUser() OR assignee is EMPTY) ORDER BY updated DESC").strip(),
+                jira_jql=resolved_jira_jql,
                 autostart=bool(data.get("autostart", False))
             )
         except Exception as e:

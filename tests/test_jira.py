@@ -300,5 +300,97 @@ class TestJiraHierarchyParsing(unittest.TestCase):
         self.assertEqual(qa_subtask.parent_key, "FF-617")
 
 
+class TestJiraFilteringAndTratativas(unittest.TestCase):
+    def test_default_jql_filters_subtasks(self):
+        self.assertIn("issuetype not in subtaskIssueTypes()", JiraProvider.DEFAULT_JQL)
+
+    def test_legacy_default_jql_migration(self):
+        import yaml
+        tmp = "tests_tmp_legacy_jql.yaml"
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                yaml.safe_dump({
+                    "jira_jql": "sprint in openSprints() AND (assignee = currentUser() OR assignee is EMPTY) ORDER BY updated DESC"
+                }, f)
+
+            cm = ConfigManager(custom_path=tmp)
+            self.assertEqual(cm.config.jira_jql, ConfigManager.DEFAULT_JIRA_JQL)
+            self.assertIn("issuetype not in subtaskIssueTypes()", cm.config.jira_jql)
+        finally:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+
+    def test_user_filtering_excludes_external_story_subtasks(self):
+        from PyQt6.QtWidgets import QApplication
+        from src.ui.views.jira_view import JiraView
+        app = QApplication.instance() or QApplication(["-platform", "offscreen"])
+
+        now = datetime.now(timezone.utc)
+        # História do próprio usuário
+        my_story = JiraTaskItem(
+            key="FF-474",
+            summary="Minha história na sprint",
+            status="Em Desenvolvimento",
+            status_category="indeterminate",
+            priority="Alta",
+            issue_type="Story",
+            assignee="Antonio Barbosa Junior",
+            created_at=now,
+            updated_at=now,
+            html_url="https://jira/FF-474",
+            is_subtask=False
+        )
+        # Subtarefa da história do próprio usuário
+        my_subtask = JiraTaskItem(
+            key="FF-649",
+            summary="Desenvolvimento da minha história",
+            status="Em Andamento",
+            status_category="indeterminate",
+            priority="Alta",
+            issue_type="Subtarefa de Desenvolvimento",
+            assignee="Antonio Barbosa Junior",
+            created_at=now,
+            updated_at=now,
+            html_url="https://jira/FF-649",
+            is_subtask=True,
+            parent_key="FF-474",
+            parent_summary="Minha história na sprint"
+        )
+        # Subtarefa de Code Review feita em história de outro dev (Ricardo - FF-617)
+        external_cr_subtask = JiraTaskItem(
+            key="FF-661",
+            summary="CR: Code Review",
+            status="Done",
+            status_category="done",
+            priority="Média",
+            issue_type="Subtarefa de Code Review",
+            assignee="Antonio Barbosa Junior",
+            created_at=now,
+            updated_at=now,
+            html_url="https://jira/FF-661",
+            is_subtask=True,
+            parent_key="FF-617",
+            parent_summary="Aceitar CNPJ alfanumérico na validação de identificadores"
+        )
+
+        jira_view = JiraView()
+        tasks = [my_story, my_subtask, external_cr_subtask]
+        jira_view.update_tasks(tasks, current_user_name="Antonio Barbosa Junior")
+
+        # Verifica se na renderização do Kanban a história externa FF-617 NÃO gerou swimlane
+        # Deve existir exatamente 1 swimlane (FF-474) e nenhuma para FF-617
+        swimlanes = [
+            jira_view.cards_layout.itemAt(i).widget()
+            for i in range(jira_view.cards_layout.count())
+            if jira_view.cards_layout.itemAt(i).widget()
+        ]
+        swimlane_keys = [getattr(s, "parent_key", "") for s in swimlanes if hasattr(s, "parent_key")]
+        self.assertIn("FF-474", swimlane_keys)
+        self.assertNotIn("FF-617", swimlane_keys)
+
+
 if __name__ == "__main__":
     unittest.main()

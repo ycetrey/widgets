@@ -55,4 +55,4 @@ jira_email: "seu-email@empresa.com"
 jira_api_token: ""
 
 # Consulta JQL para filtrar tarefas da sprint atual atribuídas a você ou não atribuídas
-jira_jql: "sprint in openSprints() AND (assignee = currentUser() OR assignee is EMPTY) ORDER BY updated DESC"
+jira_jql: "sprint in openSprints() AND (assignee = currentUser() OR assignee is EMPTY) AND issuetype not in subtaskIssueTypes() ORDER BY updated DESC"

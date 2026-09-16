@@ -28,8 +28,22 @@ class JiraView(QWidget):
     def __init__(self, parent: QWidget = None):
         super().__init__(parent)
         self.all_tasks: List[JiraTaskItem] = []
+        self.current_user_name: Optional[str] = None
         self.view_mode = "kanban"  # "kanban" ou "list"
         self._init_ui()
+
+    @staticmethod
+    def _is_subtask(t: JiraTaskItem) -> bool:
+        if getattr(t, "is_subtask", False):
+            return True
+        if t.issue_type.lower().startswith("sub"):
+            return True
+        if t.parent_issue_type and t.parent_issue_type.lower() not in ("epic", "épico", ""):
+            return True
+        return False
+
+    def set_current_user_name(self, name: Optional[str]):
+        self.current_user_name = name
 
     def _init_ui(self):
         root_layout = QVBoxLayout(self)
@@ -136,8 +150,10 @@ class JiraView(QWidget):
         else:
             self.refresh_btn.setText("🔄 Atualizar")
 
-    def update_tasks(self, tasks: List[JiraTaskItem]):
+    def update_tasks(self, tasks: List[JiraTaskItem], current_user_name: Optional[str] = None):
         self.all_tasks = tasks
+        if current_user_name:
+            self.current_user_name = current_user_name
 
         # Atualiza opções do combo de status preservando seleção
         current_selection = self.status_combo.currentData()
@@ -168,7 +184,14 @@ class JiraView(QWidget):
         selected_assignee = self.assignee_combo.currentData()
         query = self.search_input.text().strip().lower()
 
-        filtered = self.all_tasks
+        # Identifica as chaves das histórias/tarefas padrão do usuário carregadas
+        user_story_keys = {t.key for t in self.all_tasks if not self._is_subtask(t)}
+
+        # Filtra para que subtarefas de histórias pertencentes a outros usuários (ex: Code Review realizado em história alheia) não sejam listadas
+        filtered = [
+            t for t in self.all_tasks
+            if not self._is_subtask(t) or not t.parent_key or t.parent_key in user_story_keys
+        ]
 
         # Filtro de status
         if selected_status and selected_status != "all":
@@ -176,7 +199,14 @@ class JiraView(QWidget):
 
         # Filtro de responsável
         if selected_assignee == "mine":
-            filtered = [t for t in filtered if t.assignee.lower() not in ("não atribuído", "unassigned", "none", "?")]
+            if self.current_user_name:
+                user_lower = self.current_user_name.lower()
+                filtered = [
+                    t for t in filtered
+                    if user_lower in t.assignee.lower() or t.assignee.lower() in ("você", "voce")
+                ]
+            else:
+                filtered = [t for t in filtered if t.assignee.lower() not in ("não atribuído", "unassigned", "none", "?")]
         elif selected_assignee == "unassigned":
             filtered = [t for t in filtered if t.assignee.lower() in ("não atribuído", "unassigned", "none", "?")]
 
@@ -215,19 +245,9 @@ class JiraView(QWidget):
         story_subtasks: Dict[str, List[JiraTaskItem]] = defaultdict(list)
         standalone_tasks: List[JiraTaskItem] = []
 
-        def is_subtask_item(t: JiraTaskItem) -> bool:
-            if getattr(t, "is_subtask", False):
-                return True
-            if t.issue_type.lower().startswith("sub"):
-                return True
-            # Se tiver parent_issue_type que seja História/Tarefa/Bug (não épico), é subtarefa
-            if t.parent_issue_type and t.parent_issue_type.lower() not in ("epic", "épico", ""):
-                return True
-            return False
-
         # 1. Registra todas as Histórias / Tarefas padrão presentes
         for task in tasks:
-            if not is_subtask_item(task):
+            if not self._is_subtask(task):
                 epic = getattr(task, "epic_summary", None)
                 if not epic and task.parent_issue_type and task.parent_issue_type.lower() in ("epic", "épico"):
                     epic = task.parent_summary
@@ -245,23 +265,11 @@ class JiraView(QWidget):
 
         # 2. Agrupa subtarefas por chave da História pai
         for task in tasks:
-            if is_subtask_item(task):
+            if self._is_subtask(task):
                 story_key = task.parent_key
-                if story_key:
+                if story_key and story_key in stories:
                     story_subtasks[story_key].append(task)
-                    if story_key not in stories:
-                        base_url = task.html_url.rsplit("/browse/", 1)[0] if "/browse/" in task.html_url else ""
-                        stories[story_key] = {
-                            "key": story_key,
-                            "summary": task.parent_summary or "História Principal",
-                            "status": task.parent_status or "",
-                            "issue_type": task.parent_issue_type or "Story",
-                            "assignee": "",
-                            "url": f"{base_url}/browse/{story_key}" if base_url else "",
-                            "epic": getattr(task, "epic_summary", None),
-                            "item": None
-                        }
-                else:
+                elif not story_key:
                     standalone_tasks.append(task)
 
         # 3. Adiciona subtarefas da subtasks_list da própria história se não tiverem vindo como itens
