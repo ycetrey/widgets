@@ -60,6 +60,9 @@ class DatabaseManager:
                     parent_summary TEXT,
                     parent_status TEXT,
                     parent_issue_type TEXT,
+                    is_subtask INTEGER DEFAULT 0,
+                    epic_key TEXT,
+                    epic_summary TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     html_url TEXT NOT NULL,
@@ -97,6 +100,18 @@ class DatabaseManager:
                 pass
             try:
                 conn.execute("ALTER TABLE pull_requests ADD COLUMN checks_state TEXT")
+            except sqlite3.OperationalError:
+                pass
+            try:
+                conn.execute("ALTER TABLE jira_tasks ADD COLUMN is_subtask INTEGER DEFAULT 0")
+            except sqlite3.OperationalError:
+                pass
+            try:
+                conn.execute("ALTER TABLE jira_tasks ADD COLUMN epic_key TEXT")
+            except sqlite3.OperationalError:
+                pass
+            try:
+                conn.execute("ALTER TABLE jira_tasks ADD COLUMN epic_summary TEXT")
             except sqlite3.OperationalError:
                 pass
 
@@ -144,9 +159,9 @@ class DatabaseManager:
                     INSERT OR REPLACE INTO jira_tasks (
                         key, summary, status, status_category, priority, issue_type,
                         assignee, assignee_avatar, parent_key, parent_summary,
-                        parent_status, parent_issue_type, created_at, updated_at,
-                        html_url, last_synced_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        parent_status, parent_issue_type, is_subtask, epic_key,
+                        epic_summary, created_at, updated_at, html_url, last_synced_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     t.key,
                     t.summary,
@@ -160,6 +175,9 @@ class DatabaseManager:
                     getattr(t, "parent_summary", None),
                     getattr(t, "parent_status", None),
                     getattr(t, "parent_issue_type", None),
+                    1 if getattr(t, "is_subtask", False) else 0,
+                    getattr(t, "epic_key", None),
+                    getattr(t, "epic_summary", None),
                     t.created_at.isoformat() if t.created_at else now_iso,
                     t.updated_at.isoformat() if t.updated_at else now_iso,
                     t.html_url,
@@ -172,6 +190,7 @@ class DatabaseManager:
         with self._get_connection() as conn:
             cursor = conn.execute("SELECT * FROM jira_tasks ORDER BY updated_at DESC")
             for row in cursor.fetchall():
+                row_keys = row.keys()
                 item = JiraTaskItem(
                     key=row["key"],
                     summary=row["summary"],
@@ -187,7 +206,10 @@ class DatabaseManager:
                     parent_key=row["parent_key"],
                     parent_summary=row["parent_summary"],
                     parent_status=row["parent_status"],
-                    parent_issue_type=row["parent_issue_type"]
+                    parent_issue_type=row["parent_issue_type"],
+                    is_subtask=bool(row["is_subtask"]) if "is_subtask" in row_keys else False,
+                    epic_key=row["epic_key"] if "epic_key" in row_keys else None,
+                    epic_summary=row["epic_summary"] if "epic_summary" in row_keys else None
                 )
                 items.append(item)
         return items

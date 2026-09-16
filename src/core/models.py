@@ -206,6 +206,10 @@ class JiraTaskItem:
     parent_summary: Optional[str] = None
     parent_status: Optional[str] = None
     parent_issue_type: Optional[str] = None
+    is_subtask: bool = False
+    epic_key: Optional[str] = None
+    epic_summary: Optional[str] = None
+    subtasks_list: List[dict] = field(default_factory=list)
 
     @property
     def updated_humanized(self) -> str:

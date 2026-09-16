@@ -48,6 +48,9 @@ class KanbanSwimlane(QWidget):
         parent_url: str,
         tasks: List[JiraTaskItem],
         total_subtasks: int = 0,
+        epic_summary: Optional[str] = None,
+        issue_type: Optional[str] = None,
+        assignee: Optional[str] = None,
         parent: QWidget = None
     ):
         super().__init__(parent)
@@ -57,6 +60,9 @@ class KanbanSwimlane(QWidget):
         self.parent_url = parent_url
         self.tasks = tasks
         self.total_subtasks = total_subtasks if total_subtasks > 0 else len(tasks)
+        self.epic_summary = epic_summary
+        self.issue_type = issue_type or "Story"
+        self.assignee = assignee or (tasks[0].assignee if tasks else "")
         self.is_expanded = True
         self._init_ui()
 
@@ -90,14 +96,30 @@ class KanbanSwimlane(QWidget):
         self.arrow_label.setStyleSheet("color: #7d8590; font-size: 11px; font-weight: bold; background: transparent;")
         header_layout.addWidget(self.arrow_label)
 
-        # Ícone de Tarefa / História (quadradinho verde com '+')
-        type_badge = QLabel("＋")
+        # Ícone do Tipo de Issue (História / Bug / Tarefa)
+        type_lower = (self.issue_type or "").lower()
+        if "bug" in type_lower:
+            type_symbol = "●"
+            type_bg = "#da3633"
+        elif any(k in type_lower for k in ("story", "história", "historia")):
+            type_symbol = "☑"
+            type_bg = "#1f6feb"
+        elif not self.parent_key:
+            # Swimlane de tarefas avulsas
+            type_symbol = "📋"
+            type_bg = "#30363d"
+        else:
+            type_symbol = "☑"
+            type_bg = "#238636"
+
+        type_badge = QLabel(type_symbol)
         type_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
         type_badge.setFixedSize(16, 16)
-        type_badge.setStyleSheet("background-color: #238636; color: white; border-radius: 3px; font-size: 11px; font-weight: bold;")
+        type_badge.setStyleSheet(f"background-color: {type_bg}; color: white; border-radius: 3px; font-size: 11px; font-weight: bold;")
+        type_badge.setToolTip(f"Tipo: {self.issue_type}")
         header_layout.addWidget(type_badge)
 
-        # Chave e Título do Pai
+        # Chave e Título do Pai / História
         parent_text = f"{self.parent_key}  {self.parent_summary}" if self.parent_key else self.parent_summary
         self.title_label = QLabel(parent_text)
         self.title_label.setStyleSheet("color: #e6edf3; font-size: 13px; font-weight: bold; background: transparent;")
@@ -108,9 +130,27 @@ class KanbanSwimlane(QWidget):
         count_label.setStyleSheet("color: #7d8590; font-size: 12px; background: transparent;")
         header_layout.addWidget(count_label)
 
+        # Badge do Épico (ex: API Integra — Acesso e cobrança)
+        if self.epic_summary:
+            epic_text = self.epic_summary
+            if len(epic_text) > 36:
+                epic_text = epic_text[:34] + "..."
+            epic_badge = QLabel(epic_text)
+            epic_badge.setToolTip(f"Épico: {self.epic_summary}")
+            epic_badge.setStyleSheet("""
+                background-color: rgba(56, 189, 248, 0.15);
+                color: #38bdf8;
+                border: 1px solid rgba(56, 189, 248, 0.4);
+                border-radius: 4px;
+                padding: 2px 8px;
+                font-size: 11px;
+                font-weight: 500;
+            """)
+            header_layout.addWidget(epic_badge)
+
         header_layout.addStretch()
 
-        # Badge do Status do Pai (ex: CODE REVIEW em azul)
+        # Badge do Status da História (ex: CODE REVIEW em azul)
         if self.parent_status:
             status_badge = QLabel(self.parent_status)
             status_badge.setStyleSheet("""
@@ -124,13 +164,14 @@ class KanbanSwimlane(QWidget):
             """)
             header_layout.addWidget(status_badge)
 
-        # Avatar do responsável pelo pai (se aplicável)
-        assignee_initials = _get_initials(self.tasks[0].assignee if self.tasks else "")
+        # Avatar do responsável pela história
+        assignee_initials = _get_initials(self.assignee)
         if assignee_initials != "?":
             avatar = QLabel(assignee_initials)
             avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
             avatar.setFixedSize(20, 20)
-            avatar.setStyleSheet("background-color: #238636; color: white; border-radius: 10px; font-size: 9px; font-weight: bold;")
+            avatar.setToolTip(f"Responsável: {self.assignee}")
+            avatar.setStyleSheet("background-color: #1f6feb; color: white; border-radius: 10px; font-size: 9px; font-weight: bold;")
             header_layout.addWidget(avatar)
 
         # Link para abrir pai no navegador

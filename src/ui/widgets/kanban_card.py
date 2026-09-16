@@ -33,18 +33,29 @@ class KanbanCard(QFrame):
         self._init_ui()
 
     def _init_ui(self):
-        self.setStyleSheet("""
-            QFrame#kanbanCard {
+        cat = (self.task.status_category or "").lower()
+        if cat == "done":
+            left_border = "#238636"
+            hover_border = "#2ea043"
+        elif cat == "new":
+            left_border = "#388bfd"
+            hover_border = "#58a6ff"
+        else:
+            left_border = "#d29922"
+            hover_border = "#e3b341"
+
+        self.setStyleSheet(f"""
+            QFrame#kanbanCard {{
                 background-color: #22272b;
                 border: 1px solid #2d333b;
-                border-left: 3px solid #238636;
+                border-left: 3px solid {left_border};
                 border-radius: 4px;
-            }
-            QFrame#kanbanCard:hover {
+            }}
+            QFrame#kanbanCard:hover {{
                 background-color: #282e33;
                 border-color: #444c56;
-                border-left: 3px solid #2ea043;
-            }
+                border-left: 3px solid {hover_border};
+            }}
         """)
         self.setObjectName("kanbanCard")
 

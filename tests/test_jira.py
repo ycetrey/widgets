@@ -163,5 +163,142 @@ class TestJiraConfigPersistence(unittest.TestCase):
                 os.remove(tmp)
 
 
+class TestJiraHierarchyParsing(unittest.TestCase):
+    @patch("requests.get")
+    def test_epic_vs_story_and_subtasks(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "issues": [
+                {
+                    "key": "FF-617",
+                    "fields": {
+                        "summary": "Aceitar CNPJ alfanumérico",
+                        "status": {"name": "CODE REVIEW", "statusCategory": {"key": "indeterminate"}},
+                        "priority": {"name": "Medium"},
+                        "issuetype": {"name": "Story", "subtask": False, "hierarchyLevel": 0},
+                        "assignee": {"displayName": "Ricardo Silva"},
+                        "created": "2024-03-01T10:00:00Z",
+                        "updated": "2024-03-02T15:30:00Z",
+                        "parent": {
+                            "key": "FF-403",
+                            "fields": {
+                                "summary": "API Integra — Acesso e cobrança",
+                                "issuetype": {"name": "Epic", "subtask": False, "hierarchyLevel": 1}
+                            }
+                        },
+                        "subtasks": [
+                            {
+                                "key": "FF-618",
+                                "fields": {
+                                    "summary": "Dev: Desenvolvimento",
+                                    "status": {"name": "Done", "statusCategory": {"key": "done"}},
+                                    "priority": {"name": "Medium"},
+                                    "issuetype": {"name": "Subtarefa de Desenvolvimento", "subtask": True, "hierarchyLevel": -1}
+                                }
+                            },
+                            {
+                                "key": "FF-679",
+                                "fields": {
+                                    "summary": "Dev: Integração",
+                                    "status": {"name": "To Do", "statusCategory": {"key": "new"}},
+                                    "priority": {"name": "Medium"},
+                                    "issuetype": {"name": "Subtarefa de Integração", "subtask": True, "hierarchyLevel": -1}
+                                }
+                            }
+                        ]
+                    }
+                },
+                {
+                    "key": "FF-661",
+                    "fields": {
+                        "summary": "CR: Code Review",
+                        "status": {"name": "Done", "statusCategory": {"key": "done"}},
+                        "priority": {"name": "Medium"},
+                        "issuetype": {"name": "Subtarefa de Code Review", "subtask": True, "hierarchyLevel": -1},
+                        "assignee": {"displayName": "Antonio Junior"},
+                        "created": "2024-03-01T10:00:00Z",
+                        "updated": "2024-03-02T15:30:00Z",
+                        "parent": {
+                            "key": "FF-617",
+                            "fields": {
+                                "summary": "Aceitar CNPJ alfanumérico",
+                                "status": {"name": "CODE REVIEW"},
+                                "issuetype": {"name": "Story", "subtask": False, "hierarchyLevel": 0}
+                            }
+                        }
+                    }
+                }
+            ]
+        }
+        mock_resp_batch = MagicMock()
+        mock_resp_batch.status_code = 200
+        mock_resp_batch.json.return_value = {
+            "issues": [
+                {
+                    "key": "FF-618",
+                    "fields": {
+                        "summary": "Dev: Desenvolvimento",
+                        "status": {"name": "Done", "statusCategory": {"key": "done"}},
+                        "priority": {"name": "Medium"},
+                        "issuetype": {"name": "Subtarefa de Desenvolvimento", "subtask": True, "hierarchyLevel": -1},
+                        "assignee": {"displayName": "Ricardo Silva"},
+                        "created": "2024-03-01T10:00:00Z",
+                        "updated": "2024-03-02T15:30:00Z",
+                        "parent": {"key": "FF-617", "fields": {"summary": "Aceitar CNPJ alfanumérico", "issuetype": {"name": "Story"}}}
+                    }
+                },
+                {
+                    "key": "FF-679",
+                    "fields": {
+                        "summary": "QA: Validação",
+                        "status": {"name": "To Do", "statusCategory": {"key": "new"}},
+                        "priority": {"name": "Medium"},
+                        "issuetype": {"name": "Subtarefa de QA", "subtask": True, "hierarchyLevel": -1},
+                        "assignee": {"displayName": "Nicolle Emanuele"},
+                        "created": "2024-03-01T10:00:00Z",
+                        "updated": "2024-03-02T15:30:00Z",
+                        "parent": {"key": "FF-617", "fields": {"summary": "Aceitar CNPJ alfanumérico", "issuetype": {"name": "Story"}}}
+                    }
+                }
+            ]
+        }
+        mock_get.side_effect = [mock_resp, mock_resp_batch]
+
+        provider = JiraProvider(
+            jira_url="https://fiscalmax.atlassian.net",
+            email="dev@empresa.com",
+            api_token="token",
+            demo_mode=False
+        )
+
+        result = provider.fetch()
+        items = result["items"]
+        self.assertEqual(len(items), 4)
+
+        # 1. Valida História FF-617
+        story = next(i for i in items if i.key == "FF-617")
+        self.assertFalse(story.is_subtask)
+        self.assertEqual(story.epic_key, "FF-403")
+        self.assertEqual(story.epic_summary, "API Integra — Acesso e cobrança")
+        self.assertIsNone(story.parent_key)  # Não pode ter parent_key apontando para o épico!
+        self.assertEqual(len(story.subtasks_list), 2)
+        self.assertEqual(story.subtasks_list[0]["key"], "FF-618")
+        self.assertEqual(story.subtasks_list[1]["key"], "FF-679")
+
+        # 2. Valida Subtarefa FF-661
+        subtask = next(i for i in items if i.key == "FF-661")
+        self.assertTrue(subtask.is_subtask)
+        self.assertEqual(subtask.parent_key, "FF-617")
+        self.assertEqual(subtask.parent_summary, "Aceitar CNPJ alfanumérico")
+        self.assertEqual(subtask.parent_issue_type, "Story")
+
+        # 3. Valida Subtarefa de QA FF-679 com assignee real (Nicolle Emanuele)
+        qa_subtask = next(i for i in items if i.key == "FF-679")
+        self.assertTrue(qa_subtask.is_subtask)
+        self.assertEqual(qa_subtask.assignee, "Nicolle Emanuele")
+        self.assertEqual(qa_subtask.parent_key, "FF-617")
+
+
 if __name__ == "__main__":
     unittest.main()

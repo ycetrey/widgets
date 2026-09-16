@@ -65,7 +65,7 @@ class JiraProvider(BaseStatusProvider):
         endpoint = f"{self.jira_url}/rest/api/3/search/jql"
         params = {
             "jql": self.jql,
-            "fields": "summary,status,priority,issuetype,assignee,created,updated,parent",
+            "fields": "summary,status,priority,issuetype,assignee,created,updated,parent,subtasks",
             "maxResults": 100
         }
 
@@ -83,6 +83,37 @@ class JiraProvider(BaseStatusProvider):
             if resp.status_code == 200:
                 data = resp.json()
                 issues = data.get("issues", [])
+
+                # 1. Identifica subtarefas filhas das histórias que não vieram na consulta inicial (ex: subtarefas de QA atribuídas a outro membro da equipe)
+                all_subtask_keys = set()
+                for issue in issues:
+                    f = issue.get("fields") or {}
+                    for st in f.get("subtasks") or []:
+                        st_k = st.get("key")
+                        if st_k:
+                            all_subtask_keys.add(st_k)
+
+                existing_keys = {i.get("key") for i in issues}
+                missing_subtask_keys = [k for k in all_subtask_keys if k not in existing_keys]
+
+                # 2. Busca em lote os detalhes reais (incluindo o assignee real, ex: QA 'Nicolle Emanuele')
+                if missing_subtask_keys:
+                    try:
+                        for chunk_start in range(0, len(missing_subtask_keys), 50):
+                            chunk_keys = missing_subtask_keys[chunk_start:chunk_start + 50]
+                            chunk_jql = f"key in ({','.join(chunk_keys)})"
+                            batch_params = {
+                                "jql": chunk_jql,
+                                "fields": "summary,status,priority,issuetype,assignee,created,updated,parent",
+                                "maxResults": len(chunk_keys)
+                            }
+                            b_resp = requests.get(endpoint, headers=headers, auth=auth, params=batch_params, timeout=10)
+                            if b_resp.status_code == 200:
+                                b_data = b_resp.json()
+                                issues.extend(b_data.get("issues", []))
+                    except Exception as e:
+                        print(f"[Jira] Aviso: Erro ao buscar detalhes de subtarefas filhas ausentes: {e}")
+
                 items: List[JiraTaskItem] = []
 
                 for issue in issues:
@@ -97,17 +128,70 @@ class JiraProvider(BaseStatusProvider):
 
                     type_obj = fields.get("issuetype") or {}
                     type_name = type_obj.get("name", "Tarefa")
+                    is_subtask = type_obj.get("subtask", False)
+                    hierarchy_level = type_obj.get("hierarchyLevel", -1 if is_subtask else 0)
 
                     assignee_obj = fields.get("assignee") or {}
                     assignee_name = assignee_obj.get("displayName") or "Não atribuído"
                     assignee_avatar = ((assignee_obj.get("avatarUrls") or {}).get("48x48")) or ""
 
                     parent_obj = fields.get("parent") or {}
-                    parent_key = parent_obj.get("key")
+                    raw_parent_key = parent_obj.get("key")
                     parent_fields = parent_obj.get("fields") or {}
-                    parent_summary = parent_fields.get("summary")
-                    parent_status = (parent_fields.get("status") or {}).get("name")
-                    parent_issue_type = (parent_fields.get("issuetype") or {}).get("name")
+                    raw_parent_summary = parent_fields.get("summary")
+                    raw_parent_status = (parent_fields.get("status") or {}).get("name")
+                    parent_type_obj = parent_fields.get("issuetype") or {}
+                    raw_parent_issue_type = parent_type_obj.get("name")
+                    parent_hierarchy = parent_type_obj.get("hierarchyLevel")
+
+                    # Distingue Épico de História Pai:
+                    # Se o pai for do tipo 'Epic' (ou hierarchyLevel 1), ele é um Épico, não uma História/Swimlane
+                    is_parent_epic = (
+                        (raw_parent_issue_type and raw_parent_issue_type.lower() in ("epic", "épico")) or
+                        parent_hierarchy == 1
+                    )
+
+                    epic_key = None
+                    epic_summary = None
+                    parent_key = None
+                    parent_summary = None
+                    parent_status = None
+                    parent_issue_type = None
+
+                    if is_parent_epic:
+                        epic_key = raw_parent_key
+                        epic_summary = raw_parent_summary
+                        if is_subtask:
+                            parent_key = raw_parent_key
+                            parent_summary = raw_parent_summary
+                            parent_status = raw_parent_status
+                            parent_issue_type = raw_parent_issue_type
+                    else:
+                        if is_subtask:
+                            parent_key = raw_parent_key
+                            parent_summary = raw_parent_summary
+                            parent_status = raw_parent_status
+                            parent_issue_type = raw_parent_issue_type
+                        elif raw_parent_key:
+                            epic_key = raw_parent_key
+                            epic_summary = raw_parent_summary
+
+                    # Subtarefas anexadas à issue (quando esta for uma História/Tarefa)
+                    raw_subtasks = fields.get("subtasks") or []
+                    subtasks_list = []
+                    for st in raw_subtasks:
+                        st_fields = st.get("fields") or {}
+                        st_status_obj = st_fields.get("status") or {}
+                        st_prio_obj = st_fields.get("priority") or {}
+                        st_type_obj = st_fields.get("issuetype") or {}
+                        subtasks_list.append({
+                            "key": st.get("key"),
+                            "summary": st_fields.get("summary", ""),
+                            "status": st_status_obj.get("name", "To Do"),
+                            "status_category": (st_status_obj.get("statusCategory") or {}).get("key", "new"),
+                            "priority": st_prio_obj.get("name", "Normal"),
+                            "issue_type": st_type_obj.get("name", "Subtarefa"),
+                        })
 
                     created_dt = self._parse_datetime(fields.get("created"))
                     updated_dt = self._parse_datetime(fields.get("updated"))
@@ -128,7 +212,11 @@ class JiraProvider(BaseStatusProvider):
                         parent_key=parent_key,
                         parent_summary=parent_summary,
                         parent_status=parent_status,
-                        parent_issue_type=parent_issue_type
+                        parent_issue_type=parent_issue_type,
+                        is_subtask=is_subtask,
+                        epic_key=epic_key,
+                        epic_summary=epic_summary,
+                        subtasks_list=subtasks_list
                     )
                     items.append(item)
 

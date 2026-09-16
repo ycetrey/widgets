@@ -206,38 +206,118 @@ class JiraView(QWidget):
             self._render_list_view(filtered)
 
     def _render_kanban_view(self, tasks: List[JiraTaskItem]):
-        # Agrupa tarefas por Pai / História (Swimlanes)
-        parents_map: Dict[str, List[JiraTaskItem]] = defaultdict(list)
-        parent_info: Dict[str, dict] = {}
+        # Agrupa por História (Swimlane)
+        # No Jira, cada Swimlane representa uma História / Tarefa Padrão.
+        # Os cards dentro das colunas do Swimlane são as Subtarefas daquela História.
+        # Épicos NÃO são swimlanes: aparecem como badge/tag identificador na História.
+
+        stories: Dict[str, dict] = {}
+        story_subtasks: Dict[str, List[JiraTaskItem]] = defaultdict(list)
         standalone_tasks: List[JiraTaskItem] = []
 
+        def is_subtask_item(t: JiraTaskItem) -> bool:
+            if getattr(t, "is_subtask", False):
+                return True
+            if t.issue_type.lower().startswith("sub"):
+                return True
+            # Se tiver parent_issue_type que seja História/Tarefa/Bug (não épico), é subtarefa
+            if t.parent_issue_type and t.parent_issue_type.lower() not in ("epic", "épico", ""):
+                return True
+            return False
+
+        # 1. Registra todas as Histórias / Tarefas padrão presentes
         for task in tasks:
-            if task.parent_key:
-                parents_map[task.parent_key].append(task)
-                if task.parent_key not in parent_info:
-                    parent_info[task.parent_key] = {
-                        "summary": task.parent_summary or "Tarefa Principal",
-                        "status": task.parent_status,
-                        "url": task.html_url.rsplit("/browse/", 1)[0] + f"/browse/{task.parent_key}" if "/browse/" in task.html_url else ""
-                    }
+            if not is_subtask_item(task):
+                epic = getattr(task, "epic_summary", None)
+                if not epic and task.parent_issue_type and task.parent_issue_type.lower() in ("epic", "épico"):
+                    epic = task.parent_summary
+
+                stories[task.key] = {
+                    "key": task.key,
+                    "summary": task.summary,
+                    "status": task.status,
+                    "issue_type": task.issue_type,
+                    "assignee": task.assignee,
+                    "url": task.html_url,
+                    "epic": epic,
+                    "item": task
+                }
+
+        # 2. Agrupa subtarefas por chave da História pai
+        for task in tasks:
+            if is_subtask_item(task):
+                story_key = task.parent_key
+                if story_key:
+                    story_subtasks[story_key].append(task)
+                    if story_key not in stories:
+                        base_url = task.html_url.rsplit("/browse/", 1)[0] if "/browse/" in task.html_url else ""
+                        stories[story_key] = {
+                            "key": story_key,
+                            "summary": task.parent_summary or "História Principal",
+                            "status": task.parent_status or "",
+                            "issue_type": task.parent_issue_type or "Story",
+                            "assignee": "",
+                            "url": f"{base_url}/browse/{story_key}" if base_url else "",
+                            "epic": getattr(task, "epic_summary", None),
+                            "item": None
+                        }
+                else:
+                    standalone_tasks.append(task)
+
+        # 3. Adiciona subtarefas da subtasks_list da própria história se não tiverem vindo como itens
+        for skey, sinfo in list(stories.items()):
+            item = sinfo.get("item")
+            if item and hasattr(item, "subtasks_list") and item.subtasks_list:
+                existing_keys = {st.key for st in story_subtasks[skey]}
+                for sub_dict in item.subtasks_list:
+                    sub_k = sub_dict.get("key")
+                    if sub_k and sub_k not in existing_keys:
+                        base_url = item.html_url.rsplit("/browse/", 1)[0] if "/browse/" in item.html_url else ""
+                        synthetic_sub = JiraTaskItem(
+                            key=sub_k,
+                            summary=sub_dict.get("summary", ""),
+                            status=sub_dict.get("status", "To Do"),
+                            status_category=sub_dict.get("status_category", "new"),
+                            priority=sub_dict.get("priority", "Normal"),
+                            issue_type=sub_dict.get("issue_type", "Subtarefa"),
+                            assignee=sub_dict.get("assignee") or "Não atribuído",
+                            created_at=item.created_at,
+                            updated_at=item.updated_at,
+                            html_url=f"{base_url}/browse/{sub_k}" if base_url else "",
+                            assignee_avatar="",
+                            parent_key=skey,
+                            parent_summary=sinfo["summary"],
+                            parent_status=sinfo["status"],
+                            parent_issue_type=sinfo["issue_type"],
+                            is_subtask=True,
+                            epic_key=getattr(item, "epic_key", None),
+                            epic_summary=sinfo.get("epic")
+                        )
+                        story_subtasks[skey].append(synthetic_sub)
+
+        # 4. Renderiza as Swimlanes com subtarefas
+        for skey, sinfo in stories.items():
+            subs = story_subtasks.get(skey, [])
+            if subs:
+                swimlane = KanbanSwimlane(
+                    parent_key=skey,
+                    parent_summary=sinfo["summary"],
+                    parent_status=sinfo["status"],
+                    parent_url=sinfo["url"],
+                    tasks=subs,
+                    total_subtasks=len(subs),
+                    epic_summary=sinfo.get("epic"),
+                    issue_type=sinfo.get("issue_type"),
+                    assignee=sinfo.get("assignee"),
+                    parent=self.cards_container
+                )
+                self.cards_layout.addWidget(swimlane)
             else:
-                standalone_tasks.append(task)
+                item = sinfo.get("item")
+                if item:
+                    standalone_tasks.append(item)
 
-        # Renderiza Swimlanes com Pai (ex: FF-464)
-        for pkey, subtasks in parents_map.items():
-            info = parent_info[pkey]
-            swimlane = KanbanSwimlane(
-                parent_key=pkey,
-                parent_summary=info["summary"],
-                parent_status=info["status"],
-                parent_url=info["url"],
-                tasks=subtasks,
-                total_subtasks=len(subtasks),
-                parent=self.cards_container
-            )
-            self.cards_layout.addWidget(swimlane)
-
-        # Renderiza tarefas avulsas / sem pai em swimlane dedicada
+        # 5. Renderiza tarefas avulsas (histórias/tarefas sem subtarefas)
         if standalone_tasks:
             standalone_swimlane = KanbanSwimlane(
                 parent_key="",
