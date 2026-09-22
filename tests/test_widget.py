@@ -240,6 +240,57 @@ class TestGitHubProvider(unittest.TestCase):
         self.assertEqual(result2["new_items"][0].number, 44)
 
 
+class TestGitHubProviderPromotionSearch(unittest.TestCase):
+    @patch("requests.get")
+    def test_search_promotion_prs_classifies_merged_and_open(self, mock_get):
+        search_resp = MagicMock()
+        search_resp.status_code = 200
+        search_resp.json.return_value = {
+            "items": [
+                {
+                    "title": "promote(FF-100): rc-prod",
+                    "html_url": "https://github.com/org/repo/pull/10",
+                    "pull_request": {"merged_at": "2026-09-20T10:00:00Z"}
+                },
+                {
+                    "title": "promote(FF-200): rc-prod",
+                    "html_url": "https://github.com/org/repo/pull/11",
+                    "pull_request": {"merged_at": None}
+                }
+            ]
+        }
+        mock_get.return_value = search_resp
+
+        provider = GitHubProvider(repositories=["org/repo"])
+        result, had_error = provider.search_promotion_prs(["FF-100", "FF-200", "FF-300"], "rc-prod")
+
+        self.assertFalse(had_error)
+        self.assertTrue(result["FF-100"]["merged"])
+        self.assertEqual(result["FF-100"]["pr_url"], "https://github.com/org/repo/pull/10")
+        self.assertFalse(result["FF-200"]["merged"])
+        self.assertNotIn("FF-300", result)
+
+    @patch("requests.get")
+    def test_search_promotion_prs_no_repositories_returns_empty(self, mock_get):
+        provider = GitHubProvider(repositories=[])
+        result, had_error = provider.search_promotion_prs(["FF-100"], "rc-prod")
+        self.assertEqual(result, {})
+        self.assertFalse(had_error)
+        mock_get.assert_not_called()
+
+    @patch("requests.get")
+    def test_search_promotion_prs_marks_error_on_rate_limit(self, mock_get):
+        error_resp = MagicMock()
+        error_resp.status_code = 403
+        mock_get.return_value = error_resp
+
+        provider = GitHubProvider(repositories=["org/repo"])
+        result, had_error = provider.search_promotion_prs(["FF-100"], "rc-prod")
+
+        self.assertEqual(result, {})
+        self.assertTrue(had_error)
+
+
 class TestPullRequestsView(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

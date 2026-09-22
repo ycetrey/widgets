@@ -304,3 +304,60 @@ class GitHubProvider(BaseStatusProvider):
             "errors": errors,
             "current_user": self.current_user
         }
+
+    def search_promotion_prs(self, task_keys: List[str], base_branch: str) -> Tuple[Dict[str, dict], bool]:
+        """
+        Busca PRs (abertas ou mescladas) cujo título contenha alguma das
+        chaves informadas e cuja branch de destino seja `base_branch`, via
+        a GitHub Search Issues API. Retorna uma tupla (resultados, houve_erro):
+        resultados no formato {chave: {"merged": bool, "pr_url": str}} apenas
+        para as chaves em que uma PR correspondente foi encontrada (prioriza a
+        PR mesclada quando houver mais de uma correspondência), e
+        houve_erro=True se alguma consulta falhou (rate limit, token
+        inválido, erro de rede) — para o chamador não confundir "sem PR"
+        com "não foi possível verificar".
+        """
+        results: Dict[str, dict] = {}
+        had_error = False
+        if not task_keys or not self.repositories:
+            return results, had_error
+
+        headers = self._get_headers()
+        unique_keys = list(dict.fromkeys(k.strip() for k in task_keys if k and k.strip()))
+
+        for repo in self.repositories:
+            repo_clean = repo.strip()
+            if not repo_clean or "/" not in repo_clean:
+                continue
+
+            for chunk_start in range(0, len(unique_keys), 10):
+                chunk = unique_keys[chunk_start:chunk_start + 10]
+                key_query = " OR ".join(chunk)
+                query = f"repo:{repo_clean} is:pr base:{base_branch} ({key_query})"
+
+                try:
+                    resp = requests.get(
+                        f"{self.API_BASE}/search/issues",
+                        headers=headers,
+                        params={"q": query, "per_page": 50},
+                        timeout=12
+                    )
+                except requests.exceptions.RequestException:
+                    had_error = True
+                    continue
+
+                if resp.status_code != 200:
+                    had_error = True
+                    continue
+
+                for item in resp.json().get("items", []):
+                    title = item.get("title", "")
+                    pr_info = item.get("pull_request") or {}
+                    merged = pr_info.get("merged_at") is not None
+                    pr_url = item.get("html_url", "")
+
+                    for key in chunk:
+                        if key in title and (key not in results or merged):
+                            results[key] = {"merged": merged, "pr_url": pr_url}
+
+        return results, had_error
