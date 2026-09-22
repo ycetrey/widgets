@@ -53,7 +53,7 @@ fi
 # 2. Configura dependências Python
 echo ""
 echo "[2/4] Verificando dependências Python..."
-if ! python3 -c "import PyQt6, requests, yaml" &> /dev/null; then
+if ! python3 -c "import PyQt6, requests, yaml, weasyprint" &> /dev/null; then
     echo "Instalando dependências via pip para o usuário atual..."
     pip3 install --user -r "$SCRIPT_DIR/requirements.txt" || {
         echo "Aviso: 'pip3 install' falhou ou ambiente requer venv. Criando venv local..."
@@ -62,7 +62,7 @@ if ! python3 -c "import PyQt6, requests, yaml" &> /dev/null; then
         pip install -r "$SCRIPT_DIR/requirements.txt"
     }
 else
-    echo "Todas as bibliotecas Python (PyQt6, requests, pyyaml) já estão disponíveis!"
+    echo "Todas as bibliotecas Python (PyQt6, requests, pyyaml, weasyprint) já estão disponíveis!"
 fi
 
 # 3. Permissões de execução

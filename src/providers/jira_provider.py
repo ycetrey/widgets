@@ -388,9 +388,11 @@ class JiraProvider(BaseStatusProvider):
                 timeout=12
             )
             if board_resp.status_code != 200:
+                print(f"[Jira] Erro {board_resp.status_code} ao buscar board para o projeto {project_key}.")
                 return None
             boards = board_resp.json().get("values", [])
             if not boards:
+                print(f"[Jira] Nenhum board encontrado para o projeto {project_key}.")
                 return None
             board_id = boards[0]["id"]
 
@@ -401,9 +403,11 @@ class JiraProvider(BaseStatusProvider):
                 timeout=12
             )
             if sprint_resp.status_code != 200:
+                print(f"[Jira] Erro {sprint_resp.status_code} ao buscar sprint ativa do board {board_id}.")
                 return None
             sprints = sprint_resp.json().get("values", [])
             if not sprints:
+                print(f"[Jira] Nenhuma sprint ativa encontrada no board {board_id}.")
                 return None
 
             sprint = sprints[0]
@@ -413,5 +417,6 @@ class JiraProvider(BaseStatusProvider):
                 start_date=self._parse_datetime(sprint["startDate"]) if sprint.get("startDate") else None,
                 end_date=self._parse_datetime(sprint["endDate"]) if sprint.get("endDate") else None
             )
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException as e:
+            print(f"[Jira] Falha ao buscar sprint ativa: {e}")
             return None

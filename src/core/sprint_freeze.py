@@ -120,12 +120,18 @@ def generate_and_save(
     Gera um relatório completo: busca as tarefas atuais do Jira, descobre a
     sprint ativa, cruza com o GitHub, renderiza o PDF e salva o registro no
     banco. Retorna None se não houver tarefas de nível superior na sprint ou
-    nenhuma sprint ativa for encontrada.
+    nenhuma sprint ativa for encontrada. Se a busca no Jira falhar de fato
+    (credenciais inválidas, JQL inválida, rede fora), levanta RuntimeError
+    com a mensagem retornada pelo provedor, para que a UI exiba o erro real
+    em vez de "nenhuma sprint ativa".
     """
     jira_result = jira_provider.fetch()
+    jira_errors = jira_result.get("errors", [])
     jira_tasks: List[JiraTaskItem] = jira_result.get("items", [])
     top_level_tasks = [t for t in jira_tasks if not t.is_subtask]
     if not top_level_tasks:
+        if jira_errors:
+            raise RuntimeError("; ".join(jira_errors))
         return None
 
     sprint_info = jira_provider.get_active_sprint(top_level_tasks[0].key)

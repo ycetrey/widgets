@@ -2,7 +2,7 @@
 Renderização do Relatório de Sprint Freeze em PDF, a partir de um HTML
 estilizado (mesmo layout usado no relatório de referência do time).
 """
-from weasyprint import HTML
+import html
 
 from .models import SprintFreezeReport, SprintFreezeTaskEntry
 
@@ -19,10 +19,11 @@ tr:nth-child(even) { background-color: #f1f5f9; }
 
 
 def _render_row(task: SprintFreezeTaskEntry) -> str:
-    pr_cell = f'<a href="{task.pr_url}">Ver PR</a>' if task.pr_url else "—"
+    pr_cell = f'<a href="{html.escape(task.pr_url)}">Ver PR</a>' if task.pr_url else "—"
     return (
-        f"<tr><td>{task.key}</td><td>{task.summary}</td><td>{task.assignee}</td>"
-        f"<td>{task.jira_status}</td><td>{task.diagnosis}</td><td>{pr_cell}</td></tr>"
+        f"<tr><td>{html.escape(task.key)}</td><td>{html.escape(task.summary)}</td>"
+        f"<td>{html.escape(task.assignee)}</td><td>{html.escape(task.jira_status)}</td>"
+        f"<td>{html.escape(task.diagnosis)}</td><td>{pr_cell}</td></tr>"
     )
 
 
@@ -31,14 +32,15 @@ def _render_html(report: SprintFreezeReport) -> str:
     if not rows:
         rows = '<tr><td colspan="6">Nenhuma tarefa retida — sprint 100% promovida! 🎉</td></tr>'
 
-    generated_str = report.generated_at.strftime("%d/%m/%Y %H:%M")
+    generated_str = report.generated_at.astimezone().strftime("%d/%m/%Y %H:%M")
 
     return f"""
     <html>
     <head><meta charset="utf-8"><style>{_REPORT_CSS}</style></head>
     <body>
-        <h1>📊 Relatório de Sprint Freeze — {report.sprint_name}</h1>
+        <h1>📊 Relatório de Sprint Freeze — {html.escape(report.sprint_name)}</h1>
         <p>Gerado em {generated_str}</p>
+        <p style="color:#64748b;font-size:11px;">Escopo: tarefas retornadas pela consulta JQL configurada no widget (pode não refletir 100% da sprint se a consulta for filtrada por responsável).</p>
         <div class="summary">
             <strong>Total de tarefas:</strong> {report.total_tasks}<br>
             <strong>Promovidas para produção:</strong> {report.promoted_count}<br>
@@ -58,7 +60,14 @@ def render_report_pdf(report: SprintFreezeReport, output_path: str) -> str:
     """
     Renderiza o relatório em PDF no caminho informado e retorna o próprio
     caminho.
+
+    O import do WeasyPrint é local (lazy) de propósito: se a biblioteca ou
+    suas libs de sistema estiverem ausentes, a falha acontece aqui dentro,
+    virando um erro tratável pela camada de UI, em vez de derrubar o app
+    inteiro na importação do módulo.
     """
+    from weasyprint import HTML
+
     html_content = _render_html(report)
     HTML(string=html_content).write_pdf(output_path)
     return output_path
