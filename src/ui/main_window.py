@@ -182,6 +182,11 @@ class MainWindow(QMainWindow):
         self._setup_shortcuts()
         self._start_timer()
 
+        # Timer de checagem da automação de Sprint Freeze (a cada hora)
+        self.freeze_check_timer = QTimer(self)
+        self.freeze_check_timer.timeout.connect(self._check_automatic_freeze_report)
+        self.freeze_check_timer.start(60 * 60 * 1000)
+
         # Carrega dados do cache local SQLite imediatamente (carregamento instantâneo)
         self._load_from_cache()
 
@@ -706,6 +711,30 @@ class MainWindow(QMainWindow):
                 self.status_bar.showMessage(f"Relatório salvo em {dest_path}", 4000)
             except Exception as e:
                 QMessageBox.critical(self, "Erro ao salvar", f"Não foi possível salvar o arquivo:\n{e}")
+
+    def _check_automatic_freeze_report(self):
+        if not (self.config.freeze_reports_enabled and self.config.jira_enabled):
+            return
+        if self.is_generating_freeze_report:
+            return
+        if not self._last_jira_task_keys:
+            return
+
+        from datetime import date
+        from ..core.sprint_freeze import should_generate_automatic_report
+
+        sprint_info = self.jira_provider.get_active_sprint(self._last_jira_task_keys[0])
+        if sprint_info is None:
+            return
+
+        already_has_automatic = self.db.has_automatic_freeze_report(str(sprint_info.id))
+        if should_generate_automatic_report(date.today(), sprint_info.end_date, already_has_automatic):
+            self.is_generating_freeze_report = True
+            self.freeze_report_view.set_generating(True)
+            self.status_bar.showMessage(
+                "Gerando relatório automático de Sprint Freeze (segunda-feira de virada)...", 5000
+            )
+            self._start_freeze_generation(is_automatic=True)
 
     def prompt_and_perform_update(self):
         """Solicita confirmação e executa o git pull e reinicialização do aplicativo."""
