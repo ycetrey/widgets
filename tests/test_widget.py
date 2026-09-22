@@ -509,7 +509,8 @@ class TestSettingsView(unittest.TestCase):
         view.freeze_branch_input.setText("main")
 
         captured = {}
-        view.settings_saved.connect(lambda cfg: captured.update(config=cfg))
+        handler1 = lambda cfg: captured.update(config=cfg)
+        view.settings_saved.connect(handler1)
         view._save()
 
         self.assertFalse(captured["config"].freeze_reports_enabled)
@@ -525,11 +526,42 @@ class TestSettingsView(unittest.TestCase):
         view.freeze_branch_input.setText("prod")
 
         captured2 = {}
-        view.settings_saved.connect(lambda cfg: captured2.update(config=cfg))
+        view.settings_saved.disconnect(handler1)
+        handler2 = lambda cfg: captured2.update(config=cfg)
+        view.settings_saved.connect(handler2)
         view._save()
 
         self.assertTrue(captured2["config"].freeze_reports_enabled)
         self.assertEqual(captured2["config"].freeze_production_branch, "prod")
+
+    def test_freeze_branch_empty_fallback(self):
+        """Test that empty branch input falls back to 'rc-prod' default."""
+        from src.ui.views.settings_view import SettingsView
+
+        config = AppConfig(freeze_reports_enabled=False, freeze_production_branch="staging")
+        view = SettingsView(config=config)
+
+        # Clear the branch input (empty string)
+        view.freeze_branch_input.setText("")
+
+        captured = {}
+        handler = lambda cfg: captured.update(config=cfg)
+        view.settings_saved.connect(handler)
+        view._save()
+
+        # Should fall back to "rc-prod"
+        self.assertEqual(captured["config"].freeze_production_branch, "rc-prod")
+
+        # Also test with whitespace-only input
+        view.freeze_branch_input.setText("   ")
+        captured3 = {}
+        view.settings_saved.disconnect(handler)
+        handler3 = lambda cfg: captured3.update(config=cfg)
+        view.settings_saved.connect(handler3)
+        view._save()
+
+        # Should also fall back to "rc-prod"
+        self.assertEqual(captured3["config"].freeze_production_branch, "rc-prod")
 
 
 if __name__ == "__main__":
