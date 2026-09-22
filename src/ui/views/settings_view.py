@@ -198,6 +198,35 @@ class SettingsView(QWidget):
         jira_layout.addLayout(jira_form)
         layout.addWidget(jira_group)
 
+        # 3.5 Relatório de Sprint Freeze
+        freeze_group = QGroupBox("🧊 Relatório de Freeze de Sprint")
+        freeze_group.setStyleSheet("QGroupBox { font-weight: bold; color: #89b4fa; }")
+        freeze_layout = QVBoxLayout(freeze_group)
+        freeze_layout.setSpacing(10)
+
+        self.freeze_enabled_check = QCheckBox("Habilitar aba e geração automática do relatório de Sprint Freeze")
+        self.freeze_enabled_check.setStyleSheet("font-weight: 500;")
+        freeze_layout.addWidget(self.freeze_enabled_check)
+
+        freeze_desc = QLabel(
+            "Requer a integração com o Jira habilitada acima. Gera às segundas-feiras\n"
+            "(quando a sprint ativa já passou da data de término) um relatório das\n"
+            "tarefas que não chegaram na branch de produção configurada abaixo."
+        )
+        freeze_desc.setWordWrap(True)
+        freeze_desc.setStyleSheet("color: #a6adc8; font-size: 11px;")
+        freeze_layout.addWidget(freeze_desc)
+
+        freeze_form = QGridLayout()
+        freeze_form.setSpacing(8)
+        freeze_form.addWidget(QLabel("Branch de Produção:"), 0, 0)
+        self.freeze_branch_input = QLineEdit()
+        self.freeze_branch_input.setPlaceholderText("rc-prod")
+        freeze_form.addWidget(self.freeze_branch_input, 0, 1)
+        freeze_layout.addLayout(freeze_form)
+
+        layout.addWidget(freeze_group)
+
         # 4. Preferências Gerais
         pref_group = QGroupBox("Preferências do Sistema e Notificações")
         pref_group.setStyleSheet("QGroupBox { font-weight: bold; color: #89b4fa; }")
@@ -313,6 +342,10 @@ class SettingsView(QWidget):
         self.jira_token_input.setText(config.jira_api_token)
         self.jira_jql_input.setText(config.jira_jql)
 
+        # Sprint Freeze
+        self.freeze_enabled_check.setChecked(config.freeze_reports_enabled)
+        self.freeze_branch_input.setText(config.freeze_production_branch)
+
         # Autostart
         self.autostart_check.setChecked(AutostartManager.is_enabled() or config.autostart)
 
@@ -407,6 +440,8 @@ class SettingsView(QWidget):
             jira_email=self.jira_email_input.text().strip(),
             jira_api_token=self.jira_token_input.text().strip(),
             jira_jql=self.jira_jql_input.text().strip() or "sprint in openSprints() AND (assignee = currentUser() OR assignee is EMPTY) AND issuetype not in subtaskIssueTypes() ORDER BY updated DESC",
+            freeze_reports_enabled=self.freeze_enabled_check.isChecked(),
+            freeze_production_branch=self.freeze_branch_input.text().strip() or "rc-prod",
             autostart=autostart_enabled
         )
         self.config = new_config

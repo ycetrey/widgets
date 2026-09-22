@@ -490,6 +490,48 @@ class TestPullRequestsView(unittest.TestCase):
             self.assertEqual(card.height(), 67)
 
 
+class TestSettingsView(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from PyQt6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication(["-platform", "offscreen"])
+
+    def test_freeze_fields_roundtrip(self):
+        from src.ui.views.settings_view import SettingsView
+
+        config = AppConfig(freeze_reports_enabled=True, freeze_production_branch="rc-prod")
+        view = SettingsView(config=config)
+
+        self.assertTrue(view.freeze_enabled_check.isChecked())
+        self.assertEqual(view.freeze_branch_input.text(), "rc-prod")
+
+        view.freeze_enabled_check.setChecked(False)
+        view.freeze_branch_input.setText("main")
+
+        captured = {}
+        view.settings_saved.connect(lambda cfg: captured.update(config=cfg))
+        view._save()
+
+        self.assertFalse(captured["config"].freeze_reports_enabled)
+        self.assertEqual(captured["config"].freeze_production_branch, "main")
+
+        # Stronger test: verify True value is also saved correctly for freeze_reports_enabled
+        config2 = AppConfig(freeze_reports_enabled=False, freeze_production_branch="staging")
+        view.load_config(config2)
+        self.assertFalse(view.freeze_enabled_check.isChecked())
+        self.assertEqual(view.freeze_branch_input.text(), "staging")
+
+        view.freeze_enabled_check.setChecked(True)
+        view.freeze_branch_input.setText("prod")
+
+        captured2 = {}
+        view.settings_saved.connect(lambda cfg: captured2.update(config=cfg))
+        view._save()
+
+        self.assertTrue(captured2["config"].freeze_reports_enabled)
+        self.assertEqual(captured2["config"].freeze_production_branch, "prod")
+
+
 if __name__ == "__main__":
     unittest.main()
 
