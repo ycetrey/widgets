@@ -2,10 +2,14 @@
 Serviço de geração do Relatório de Sprint Freeze: cruza tarefas do Jira com
 PRs de promoção no GitHub para identificar o que não chegou em produção.
 """
+import os
 from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import List, Optional
 
+from .database import DatabaseManager
 from .models import JiraSprintInfo, JiraTaskItem, SprintFreezeReport, SprintFreezeTaskEntry
+from .pdf_report import render_report_pdf
 
 STATUS_CATEGORY_EMOJI = {
     "new": "🔨",
@@ -93,3 +97,55 @@ def should_generate_automatic_report(
     if sprint_end_date is None:
         return False
     return sprint_end_date.date() <= today
+
+
+def default_reports_dir() -> Path:
+    """Diretório padrão de armazenamento dos PDFs, no mesmo padrão XDG do banco SQLite."""
+    xdg_data = os.environ.get("XDG_DATA_HOME")
+    base_dir = Path(xdg_data) / "dev-status-widget" if xdg_data else Path.home() / ".local" / "share" / "dev-status-widget"
+    reports_dir = base_dir / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    return reports_dir
+
+
+def generate_and_save(
+    jira_provider,
+    github_provider,
+    db: DatabaseManager,
+    production_branch: str,
+    is_automatic: bool = False,
+    reports_dir: Optional[Path] = None,
+) -> Optional[SprintFreezeReport]:
+    """
+    Gera um relatório completo: busca as tarefas atuais do Jira, descobre a
+    sprint ativa, cruza com o GitHub, renderiza o PDF e salva o registro no
+    banco. Retorna None se não houver tarefas de nível superior na sprint ou
+    nenhuma sprint ativa for encontrada.
+    """
+    jira_result = jira_provider.fetch()
+    jira_tasks: List[JiraTaskItem] = jira_result.get("items", [])
+    top_level_tasks = [t for t in jira_tasks if not t.is_subtask]
+    if not top_level_tasks:
+        return None
+
+    sprint_info = jira_provider.get_active_sprint(top_level_tasks[0].key)
+    if sprint_info is None:
+        return None
+
+    task_keys = [t.key for t in top_level_tasks]
+    promotion_status, github_search_failed = github_provider.search_promotion_prs(task_keys, production_branch)
+
+    report = build_report(
+        top_level_tasks, sprint_info, promotion_status,
+        is_automatic=is_automatic, github_search_failed=github_search_failed
+    )
+
+    target_dir = reports_dir or default_reports_dir()
+    safe_sprint_name = "".join(c if c.isalnum() else "_" for c in report.sprint_name).strip("_") or report.sprint_id
+    filename = f"{safe_sprint_name}_{report.generated_at.strftime('%Y%m%d_%H%M%S')}.pdf"
+    pdf_path = str(target_dir / filename)
+    render_report_pdf(report, pdf_path)
+    report.pdf_path = pdf_path
+
+    report.id = db.save_freeze_report(report)
+    return report

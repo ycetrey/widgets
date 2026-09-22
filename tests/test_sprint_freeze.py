@@ -1,8 +1,10 @@
 """
 Testes automatizados para o serviço de Relatório de Sprint Freeze.
 """
+import os
 import unittest
 from datetime import date, datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 from src.core.models import JiraSprintInfo, JiraTaskItem
 
@@ -104,3 +106,82 @@ class TestShouldGenerateAutomaticReport(unittest.TestCase):
 
     def test_skips_if_no_sprint_end_date(self):
         self.assertFalse(self.should_generate(self.MONDAY, None, already_has_automatic=False))
+
+
+class TestGenerateAndSave(unittest.TestCase):
+    def setUp(self):
+        self.tmp_db = "tests_tmp_freeze_generate.db"
+        if os.path.exists(self.tmp_db):
+            os.remove(self.tmp_db)
+        from src.core.database import DatabaseManager
+        self.db = DatabaseManager(custom_path=self.tmp_db)
+
+    def tearDown(self):
+        if os.path.exists(self.tmp_db):
+            os.remove(self.tmp_db)
+
+    @patch("src.core.sprint_freeze.render_report_pdf")
+    def test_generate_and_save_persists_report(self, mock_render_pdf):
+        mock_render_pdf.side_effect = lambda report, path: path
+
+        jira_provider = MagicMock()
+        jira_provider.fetch.return_value = {
+            "items": [_make_task("FF-9", "A Fazer", "new")],
+            "new_items": [],
+            "errors": []
+        }
+        jira_provider.get_active_sprint.return_value = JiraSprintInfo(
+            id=99, name="Sprint 99", start_date=None, end_date=None
+        )
+
+        github_provider = MagicMock()
+        github_provider.search_promotion_prs.return_value = ({}, False)
+
+        from src.core.sprint_freeze import generate_and_save
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            report = generate_and_save(
+                jira_provider, github_provider, self.db,
+                production_branch="rc-prod",
+                is_automatic=True,
+                reports_dir=Path(tmp_dir)
+            )
+
+        self.assertIsNotNone(report)
+        self.assertEqual(report.sprint_name, "Sprint 99")
+        self.assertTrue(report.is_automatic)
+        self.assertGreater(report.id, 0)
+
+        stored = self.db.get_freeze_reports()
+        self.assertEqual(len(stored), 1)
+        self.assertTrue(self.db.has_automatic_freeze_report("99"))
+
+    def test_generate_and_save_returns_none_without_active_sprint(self):
+        jira_provider = MagicMock()
+        jira_provider.fetch.return_value = {
+            "items": [_make_task("FF-9", "A Fazer", "new")],
+            "new_items": [],
+            "errors": []
+        }
+        jira_provider.get_active_sprint.return_value = None
+        github_provider = MagicMock()
+
+        from src.core.sprint_freeze import generate_and_save
+        report = generate_and_save(jira_provider, github_provider, self.db, production_branch="rc-prod")
+        self.assertIsNone(report)
+
+    def test_generate_and_save_returns_none_without_top_level_tasks(self):
+        jira_provider = MagicMock()
+        jira_provider.fetch.return_value = {
+            "items": [_make_task("FF-9-SUB1", "A Fazer", "new", is_subtask=True)],
+            "new_items": [],
+            "errors": []
+        }
+        github_provider = MagicMock()
+
+        from src.core.sprint_freeze import generate_and_save
+        report = generate_and_save(jira_provider, github_provider, self.db, production_branch="rc-prod")
+        self.assertIsNone(report)
+        jira_provider.get_active_sprint.assert_not_called()
