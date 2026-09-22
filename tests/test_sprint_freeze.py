@@ -241,6 +241,11 @@ class TestFreezeReportView(unittest.TestCase):
         self.assertEqual(view.cards_layout.count(), 1)
         self.assertIn("11 promovidas", view.status_label.text())
 
+        # Verify signal forwarding: click the card's download button
+        card = view.cards_layout.itemAt(0).widget()
+        card.download_btn.click()
+        self.assertEqual(captured, ["/tmp/r.pdf"])
+
     def test_generate_button_emits_signal(self):
         from src.ui.views.freeze_report_view import FreezeReportView
 
@@ -258,3 +263,37 @@ class TestFreezeReportView(unittest.TestCase):
         self.assertFalse(view.generate_btn.isEnabled())
         view.set_generating(False)
         self.assertTrue(view.generate_btn.isEnabled())
+
+    def test_set_reports_clears_previous_cards(self):
+        from src.ui.views.freeze_report_view import FreezeReportView
+        from src.core.models import SprintFreezeReport
+
+        view = FreezeReportView()
+
+        # First render with one report
+        report_a = SprintFreezeReport(
+            id=1, sprint_id="10", sprint_name="Sprint 42",
+            generated_at=datetime.now(timezone.utc), is_automatic=False,
+            total_tasks=18, promoted_count=11, retained_count=7,
+            pdf_path="/tmp/r1.pdf"
+        )
+        view.set_reports([report_a])
+        self.assertEqual(view.cards_layout.count(), 1)
+
+        # Second render with two reports
+        report_b = SprintFreezeReport(
+            id=2, sprint_id="11", sprint_name="Sprint 43",
+            generated_at=datetime.now(timezone.utc), is_automatic=True,
+            total_tasks=20, promoted_count=15, retained_count=5,
+            pdf_path="/tmp/r2.pdf"
+        )
+        report_c = SprintFreezeReport(
+            id=3, sprint_id="12", sprint_name="Sprint 44",
+            generated_at=datetime.now(timezone.utc), is_automatic=False,
+            total_tasks=16, promoted_count=10, retained_count=6,
+            pdf_path="/tmp/r3.pdf"
+        )
+        view.set_reports([report_b, report_c])
+
+        # Assert only 2 cards exist (not 1+2=3)
+        self.assertEqual(view.cards_layout.count(), 2)
