@@ -174,6 +174,26 @@ class TestFreezeReportsDatabase(unittest.TestCase):
         self.db.save_freeze_report(automatic)
         self.assertTrue(self.db.has_automatic_freeze_report("42"))
 
+    def test_database_path_resolution_windows(self):
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch("sys.platform", "win32"), \
+                 patch.dict(os.environ, {"LOCALAPPDATA": tmp_dir}):
+                resolved = self.db._resolve_db_path(None)
+                expected = os.path.join(tmp_dir, "dev-status-widget", "widget.db")
+                self.assertEqual(str(resolved), expected)
+
+    def test_database_path_resolution_linux_xdg(self):
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch("sys.platform", "linux"), \
+                 patch.dict(os.environ, {"XDG_DATA_HOME": tmp_dir}):
+                resolved = self.db._resolve_db_path(None)
+                expected = os.path.join(tmp_dir, "dev-status-widget", "widget.db")
+                self.assertEqual(str(resolved), expected)
+
 
 if __name__ == "__main__":
     unittest.main()

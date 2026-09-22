@@ -1,6 +1,6 @@
-# Dev Status Widget para Linux Debian (GNOME) 🐧
+# Dev Status Widget (Linux Debian/GNOME & Windows) 🐧 🪟
 
-Um aplicativo/widget desktop leve e moderno para Linux Debian (GNOME) com navegação em abas/botões para monitoramento de situações de desenvolvimento, iniciando pelo rastreamento de **Pull Requests (PRs) abertas em múltiplos repositórios do GitHub, organizadas por data da mais antiga para a mais recente**, com suporte a **notificações desktop nativas** e **ícone na bandeja do sistema (system tray)**.
+Um aplicativo/widget desktop leve e moderno multiplataforma (Linux e Windows) com navegação em abas/botões para monitoramento de situações de desenvolvimento, iniciando pelo rastreamento de **Pull Requests (PRs) abertas em múltiplos repositórios do GitHub, organizadas por data da mais antiga para a mais recente**, com suporte a **notificações desktop nativas** e **ícone na bandeja do sistema (system tray)**.
 
 ---
 
@@ -76,10 +76,11 @@ Controle de notificações, sons, inicialização com o sistema (autostart) e ve
 
 ---
 
-## 🚀 Instalação no Linux Debian
+## 🚀 Instalação e Execução
 
-### Opção 1: Instalação Automática via Script
+### No Linux Debian / Ubuntu (GNOME) 🐧
 
+#### Opção 1: Instalação Automática via Script
 Abra o terminal no diretório do projeto e execute:
 
 ```bash
@@ -92,8 +93,7 @@ O script cuidará de:
 2. Criar o atalho no menu de aplicativos do GNOME (`~/.local/share/applications/dev-status-widget.desktop`).
 3. Configurar a inicialização automática com o sistema no login (`~/.config/autostart/dev-status-widget.desktop`).
 
-### Opção 2: Instalação Manual
-
+#### Opção 2: Instalação Manual no Linux
 1. Instale os pacotes do sistema:
    ```bash
    sudo apt update
@@ -103,12 +103,41 @@ O script cuidará de:
 2. Execute o aplicativo:
    ```bash
    python3 main.py
-   ```
-
-   *Dica:* Você pode rodar com dados simulados para testar o visual e as notificações imediatamente:
-   ```bash
+   # Ou com dados de demonstração:
    python3 main.py --demo
    ```
+
+---
+
+### No Windows 10/11 🪟
+
+#### Opção 1: Instalação Automática via Script
+Abra o Prompt de Comando ou PowerShell na pasta do projeto e execute:
+
+```cmd
+install.bat
+```
+
+O script cuidará de:
+1. Verificar a presença do Python 3 (versão 3.10 ou superior recomendada).
+2. Criar o ambiente virtual isolado (`venv`).
+3. Instalar as dependências via `pip`.
+4. Criar automaticamente o atalho com o ícone oficial na sua **Área de Trabalho**.
+
+#### Opção 2: Execução no Windows
+* **Execução em Segundo Plano (Silencioso)**:
+  Dê um duplo clique no atalho criado na Área de Trabalho ou execute:
+  ```cmd
+  run.bat
+  ```
+  *(Inicia com `pythonw.exe`, sem abrir janela de prompt de comando).*
+
+* **Execução com Logs de Depuração (Terminal)**:
+  ```cmd
+  run.bat --debug
+  # Ou modo demo com dados simulados:
+  run.bat --demo
+  ```
 
 ---
 

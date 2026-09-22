@@ -171,14 +171,24 @@ class GitUpdater:
         """
         Reinicia a aplicação de forma limpa e desacoplada, liberando os recursos da instância atual.
         """
-        run_sh = self.repo_dir / "run.sh"
         args = extra_args if extra_args is not None else sys.argv[1:]
 
-        if run_sh.exists() and os.access(run_sh, os.X_OK):
-            cmd = [str(run_sh)] + args
+        if sys.platform == "win32":
+            run_bat = self.repo_dir / "run.bat"
+            if run_bat.exists():
+                cmd = [str(run_bat)] + args
+            else:
+                main_py = self.repo_dir / "main.py"
+                pythonw = Path(sys.executable).with_name("pythonw.exe")
+                py_exec = str(pythonw) if pythonw.exists() else sys.executable
+                cmd = [py_exec, str(main_py)] + args
         else:
-            main_py = self.repo_dir / "main.py"
-            cmd = [sys.executable, str(main_py)] + args
+            run_sh = self.repo_dir / "run.sh"
+            if run_sh.exists() and os.access(run_sh, os.X_OK):
+                cmd = [str(run_sh)] + args
+            else:
+                main_py = self.repo_dir / "main.py"
+                cmd = [sys.executable, str(main_py)] + args
 
         # Tenta encerrar o QApplication de forma limpa se estiver rodando
         try:
@@ -189,6 +199,18 @@ class GitUpdater:
         except Exception:
             pass
 
-        # Inicia novo processo em sessão separada para não ser encerrado junto
-        subprocess.Popen(cmd, cwd=str(self.repo_dir), start_new_session=True)
+        # Inicia novo processo em sessão/processo separado para não ser encerrado junto
+        popen_kwargs = {"cwd": str(self.repo_dir)}
+        if sys.platform == "win32":
+            creation_flags = 0
+            if hasattr(subprocess, "DETACHED_PROCESS"):
+                creation_flags |= subprocess.DETACHED_PROCESS
+            if hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):
+                creation_flags |= subprocess.CREATE_NEW_PROCESS_GROUP
+            if creation_flags:
+                popen_kwargs["creationflags"] = creation_flags
+        else:
+            popen_kwargs["start_new_session"] = True
+
+        subprocess.Popen(cmd, **popen_kwargs)
         sys.exit(0)

@@ -39,6 +39,14 @@ def main():
     # Permite que o sinal SIGINT (Ctrl+C) encerre o aplicativo no terminal
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
+    # Configura AppUserModelID no Windows para que o ícone correto seja fixado na barra de tarefas
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("devwidgets.statuswidget.app.1")
+        except Exception:
+            pass
+
     app = QApplication(sys.argv)
     app.setApplicationName("dev-status-widget")
     app.setApplicationDisplayName("Dev Status Widget")
@@ -55,16 +63,19 @@ def main():
         config.skip_permissions = True
         print("[Aviso] Modo --dangerous-skip-permissions ativado: confirmações e checagens desativadas.")
 
-    # Aplica tema escuro estilo GNOME / Adwaita
+    # Aplica tema escuro estilo moderno
     apply_theme(app, dark_mode=config.dark_mode)
 
     # Caminho do ícone
     base_dir = Path(__file__).resolve().parent
+    icon_ico_path = str(base_dir / "assets" / "icon.ico")
     icon_path = str(base_dir / "assets" / "icon.png")
     favicon_path = str(base_dir / "assets" / "favicon-32.png")
 
-    # Configura ícone da aplicação para GNOME Dock e janelas
+    # Configura ícone da aplicação para Dock/Taskbar e janelas
     app_icon = QIcon()
+    if os.path.exists(icon_ico_path):
+        app_icon.addFile(icon_ico_path)
     if os.path.exists(icon_path):
         app_icon.addFile(icon_path)
     if os.path.exists(favicon_path):

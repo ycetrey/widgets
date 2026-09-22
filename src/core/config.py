@@ -2,6 +2,7 @@
 Gerenciador de configurações para o aplicativo.
 """
 import os
+import sys
 import yaml
 from pathlib import Path
 from typing import Optional
@@ -31,12 +32,19 @@ class ConfigManager:
         if local_config.exists():
             return local_config
 
-        # 2. Checa no diretório padrão XDG do Linux (~/.config/dev-status-widget/config.yaml)
-        xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
-        if xdg_config_home:
-            user_config_dir = Path(xdg_config_home) / self.APP_DIR_NAME
+        # 2. Checa no diretório de configuração do usuário:
+        # No Windows: %APPDATA%/dev-status-widget/config.yaml
+        # No Linux/outros: ~/.config/dev-status-widget/config.yaml (ou XDG_CONFIG_HOME)
+        if sys.platform == "win32":
+            appdata = os.environ.get("APPDATA")
+            base_dir = Path(appdata) if appdata else Path.home() / "AppData" / "Roaming"
+            user_config_dir = base_dir / self.APP_DIR_NAME
         else:
-            user_config_dir = Path.home() / ".config" / self.APP_DIR_NAME
+            xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
+            if xdg_config_home:
+                user_config_dir = Path(xdg_config_home) / self.APP_DIR_NAME
+            else:
+                user_config_dir = Path.home() / ".config" / self.APP_DIR_NAME
 
         user_config_file = user_config_dir / self.DEFAULT_FILENAME
         if user_config_file.exists():

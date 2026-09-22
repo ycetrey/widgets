@@ -5,6 +5,7 @@ Salva tarefas do Jira, Pull Requests e histórico de notificações.
 import json
 import os
 import sqlite3
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Set
@@ -26,11 +27,17 @@ class DatabaseManager:
             p.parent.mkdir(parents=True, exist_ok=True)
             return p
 
-        xdg_data = os.environ.get("XDG_DATA_HOME")
-        if xdg_data:
-            base_dir = Path(xdg_data) / self.APP_DIR_NAME
+        # No Windows: %LOCALAPPDATA%/dev-status-widget/widget.db
+        # No Linux/outros: ~/.local/share/dev-status-widget/widget.db (ou XDG_DATA_HOME)
+        if sys.platform == "win32":
+            localappdata = os.environ.get("LOCALAPPDATA")
+            base_dir = (Path(localappdata) if localappdata else Path.home() / "AppData" / "Local") / self.APP_DIR_NAME
         else:
-            base_dir = Path.home() / ".local" / "share" / self.APP_DIR_NAME
+            xdg_data = os.environ.get("XDG_DATA_HOME")
+            if xdg_data:
+                base_dir = Path(xdg_data) / self.APP_DIR_NAME
+            else:
+                base_dir = Path.home() / ".local" / "share" / self.APP_DIR_NAME
 
         base_dir.mkdir(parents=True, exist_ok=True)
         return base_dir / self.DB_FILENAME

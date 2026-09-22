@@ -122,6 +122,7 @@ class TestUpdateUIComponents(unittest.TestCase):
 
         tray.set_update_available(False)
         self.assertFalse(tray.update_action.isVisible())
+        tray.hide()
 
 
 class TestMainWindowUpdateFlow(unittest.TestCase):
@@ -173,6 +174,8 @@ class TestMainWindowUpdateFlow(unittest.TestCase):
         # Notificação deve ter sido gravada no banco
         notifs = window.db.get_active_notifications()
         self.assertTrue(any(n.item_type == "update" for n in notifs))
+
+        window.quit_app()
 
 
 if __name__ == "__main__":

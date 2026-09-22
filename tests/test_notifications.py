@@ -257,8 +257,7 @@ class TestMainWindowNotificationsIntegration(unittest.TestCase):
         self.assertEqual(len(window.notifications_view.notifications), 0)
 
         # Limpeza
-        window.tray.hide()
-        window.refresh_timer.stop()
+        window.quit_app()
 
 
 class TestDesktopNotifierSound(unittest.TestCase):

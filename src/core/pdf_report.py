@@ -58,16 +58,38 @@ def _render_html(report: SprintFreezeReport) -> str:
 
 def render_report_pdf(report: SprintFreezeReport, output_path: str) -> str:
     """
-    Renderiza o relatório em PDF no caminho informado e retorna o próprio
-    caminho.
+    Renderiza o relatório em PDF no caminho informado e retorna o próprio caminho.
 
-    O import do WeasyPrint é local (lazy) de propósito: se a biblioteca ou
-    suas libs de sistema estiverem ausentes, a falha acontece aqui dentro,
-    virando um erro tratável pela camada de UI, em vez de derrubar o app
-    inteiro na importação do módulo.
+    Tenta primeiramente via WeasyPrint (layout CSS avançado).
+    Se WeasyPrint não estiver disponível (ex: no Windows sem libs GTK3/Pango instaladas),
+    utiliza como fallback o motor nativo de PDF do PyQt6 (QPdfWriter + QTextDocument).
     """
-    from weasyprint import HTML
-
     html_content = _render_html(report)
-    HTML(string=html_content).write_pdf(output_path)
-    return output_path
+
+    # 1. Tenta via WeasyPrint
+    try:
+        from weasyprint import HTML
+        HTML(string=html_content).write_pdf(output_path)
+        return output_path
+    except Exception as weasy_err:
+        # 2. Fallback para motor de PDF nativo do PyQt6 (dispensa dependências C externas)
+        try:
+            from PyQt6.QtCore import QMarginsF
+            from PyQt6.QtGui import QPageSize, QPdfWriter, QTextDocument
+            from PyQt6.QtWidgets import QApplication
+
+            app = QApplication.instance()
+            if app is None:
+                app = QApplication(["dev-status-widget", "-platform", "offscreen"])
+
+            doc = QTextDocument()
+            doc.setHtml(html_content)
+            writer = QPdfWriter(output_path)
+            writer.setPageSize(QPageSize(QPageSize.PageSizeId.A4))
+            writer.setPageMargins(QMarginsF(15, 15, 15, 15))
+            doc.print(writer)
+            return output_path
+        except Exception as qt_err:
+            raise RuntimeError(
+                f"Falha ao renderizar PDF via WeasyPrint ({weasy_err}) e via Qt ({qt_err})"
+            )

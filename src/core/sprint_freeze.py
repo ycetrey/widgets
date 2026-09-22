@@ -3,6 +3,7 @@ Serviço de geração do Relatório de Sprint Freeze: cruza tarefas do Jira com
 PRs de promoção no GitHub para identificar o que não chegou em produção.
 """
 import os
+import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import List, Optional
@@ -100,9 +101,13 @@ def should_generate_automatic_report(
 
 
 def default_reports_dir() -> Path:
-    """Diretório padrão de armazenamento dos PDFs, no mesmo padrão XDG do banco SQLite."""
-    xdg_data = os.environ.get("XDG_DATA_HOME")
-    base_dir = Path(xdg_data) / "dev-status-widget" if xdg_data else Path.home() / ".local" / "share" / "dev-status-widget"
+    """Diretório padrão de armazenamento dos PDFs, no mesmo padrão do banco SQLite."""
+    if sys.platform == "win32":
+        localappdata = os.environ.get("LOCALAPPDATA")
+        base_dir = (Path(localappdata) if localappdata else Path.home() / "AppData" / "Local") / "dev-status-widget"
+    else:
+        xdg_data = os.environ.get("XDG_DATA_HOME")
+        base_dir = Path(xdg_data) / "dev-status-widget" if xdg_data else Path.home() / ".local" / "share" / "dev-status-widget"
     reports_dir = base_dir / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     return reports_dir

@@ -3,6 +3,7 @@ Janela principal do aplicativo com suporte a abas, bandeja e auto-refresh.
 """
 import os
 import shutil
+import sys
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
@@ -449,9 +450,11 @@ class MainWindow(QMainWindow):
             print(f"[Database] Erro ao limpar notificações: {e}")
 
     def _on_test_notification(self):
+        os_label = "Windows" if sys.platform == "win32" else "GNOME"
+        msg = f"Notificação do {os_label} funcionando perfeitamente! 🚀"
         self.notifier.notify(
             "Dev Status Widget",
-            "Notificação do GNOME funcionando perfeitamente! 🚀",
+            msg,
             urgency="normal"
         )
         try:
@@ -459,7 +462,7 @@ class MainWindow(QMainWindow):
                 item_key=f"system:test:{datetime.now().timestamp()}",
                 item_type="system",
                 title="Dev Status Widget",
-                message="Notificação do GNOME funcionando perfeitamente! 🚀",
+                message=msg,
                 link_url=None
             )
             self._reload_notifications()
@@ -841,24 +844,33 @@ class MainWindow(QMainWindow):
             self.activateWindow()
 
     def closeEvent(self, event: QCloseEvent):
-        if self.config.minimize_to_tray_on_close and self.tray.isSystemTrayAvailable():
+        if not getattr(self, "_is_quitting", False) and self.config.minimize_to_tray_on_close and self.tray.isSystemTrayAvailable():
             event.ignore()
             self.hide()
+            icon = QIcon(self.icon_path) if (self.icon_path and os.path.exists(self.icon_path)) else QSystemTrayIcon.MessageIcon.Information
             self.tray.showMessage(
                 "Dev Status Widget",
                 "O aplicativo continua em execução na bandeja do sistema.",
-                QIcon(self.icon_path) if os.path.exists(self.icon_path) else None,
+                icon,
                 3000
             )
         else:
             self.quit_app()
+            event.accept()
 
     def quit_app(self):
+        self._is_quitting = True
         if hasattr(self, "dock_badge"):
             self.dock_badge.clear()
-        self.tray.hide()
-        self.refresh_timer.stop()
-        if self.thread and self.thread.isRunning():
-            self.thread.quit()
-            self.thread.wait(2000)
+        if hasattr(self, "tray"):
+            self.tray.hide()
+        if hasattr(self, "refresh_timer"):
+            self.refresh_timer.stop()
+        if hasattr(self, "freeze_check_timer"):
+            self.freeze_check_timer.stop()
+        for t_name in ["thread", "update_thread", "freeze_thread", "freeze_check_thread"]:
+            t = getattr(self, t_name, None)
+            if t and t.isRunning():
+                t.quit()
+                t.wait(2000)
         self.close()

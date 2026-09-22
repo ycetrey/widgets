@@ -1,6 +1,7 @@
 """
 Visualização da aba de Configurações do aplicativo.
 """
+import sys
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import (
@@ -259,13 +260,14 @@ class SettingsView(QWidget):
         self.tray_check.setChecked(True)
         pref_layout.addWidget(self.tray_check, 3, 0, 1, 2)
 
-        # Autostart com o sistema (Debian/Linux)
-        self.autostart_check = QCheckBox("Iniciar aplicativo automaticamente com o sistema (Debian / GNOME)")
+        # Autostart com o sistema
+        os_label = "Windows" if sys.platform == "win32" else "Debian / GNOME"
+        self.autostart_check = QCheckBox(f"Iniciar aplicativo automaticamente com o sistema ({os_label})")
         self.autostart_check.setChecked(False)
         pref_layout.addWidget(self.autostart_check, 4, 0, 1, 2)
 
         # Botão Testar Notificação
-        test_notify_btn = QPushButton("🔔 Testar Notificação do Debian / GNOME")
+        test_notify_btn = QPushButton(f"🔔 Testar Notificação do Sistema ({os_label})")
         test_notify_btn.setProperty("class", "actionButton")
         test_notify_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         test_notify_btn.clicked.connect(self.test_notification_requested.emit)

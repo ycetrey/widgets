@@ -4,6 +4,7 @@ Gerenciador de notificações desktop para Linux (GNOME/Debian) e outras platafo
 import os
 import shutil
 import subprocess
+import sys
 import time
 from typing import List, Optional
 from PyQt6.QtCore import QUrl
@@ -25,7 +26,7 @@ class DesktopNotifier:
         self.sound_path = os.path.abspath(sound_path) if sound_path else ""
         self.sound_enabled = sound_enabled
         self._last_sound_time = 0.0
-        self._notify_send_available = shutil.which("notify-send") is not None
+        self._notify_send_available = (shutil.which("notify-send") is not None) if sys.platform != "win32" else False
 
         self._sound_effect: Optional[QSoundEffect] = None
         if self.sound_path and os.path.exists(self.sound_path):
@@ -63,7 +64,16 @@ class DesktopNotifier:
             except Exception as e:
                 print(f"[Notifier] Erro ao reproduzir via QSoundEffect: {e}")
 
-        # 2. Fallback para utilitários do sistema Linux
+        # 2. Fallback para Windows (winsound nativo)
+        if sys.platform == "win32" and self.sound_path and os.path.exists(self.sound_path):
+            try:
+                import winsound
+                winsound.PlaySound(self.sound_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+                return
+            except Exception as e:
+                print(f"[Notifier] Erro ao reproduzir via winsound: {e}")
+
+        # 3. Fallback para utilitários do sistema Linux
         if self.sound_path and os.path.exists(self.sound_path):
             for player in ["pw-play", "canberra-gtk-play", "aplay"]:
                 if shutil.which(player):
