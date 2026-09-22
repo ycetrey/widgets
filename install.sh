@@ -39,6 +39,10 @@ if command -v apt-get &> /dev/null; then
         python3-requests \
         python3-yaml \
         libnotify-bin \
+        libpango-1.0-0 \
+        libpangocairo-1.0-0 \
+        libgdk-pixbuf2.0-0 \
+        libcairo2 \
         gnome-shell-extension-appindicator || {
             echo "Aviso: alguns pacotes do sistema falharam. Tentaremos instalar via pip..."
         }
