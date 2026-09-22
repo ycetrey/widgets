@@ -6,7 +6,7 @@ import unittest
 from datetime import datetime, timezone
 
 from src.core.database import DatabaseManager
-from src.core.models import JiraTaskItem, PullRequestItem
+from src.core.models import JiraTaskItem, PullRequestItem, SprintFreezeReport
 from src.ui.widgets.kanban_swimlane import get_column_index
 
 
@@ -126,6 +126,53 @@ class TestKanbanMapping(unittest.TestCase):
         # CONCLUÍDO = 4
         self.assertEqual(get_column_index("Done", "done"), 4)
         self.assertEqual(get_column_index("Concluído", "done"), 4)
+
+
+class TestFreezeReportsDatabase(unittest.TestCase):
+    def setUp(self):
+        self.tmp_db = "tests_tmp_freeze_reports.db"
+        if os.path.exists(self.tmp_db):
+            os.remove(self.tmp_db)
+        self.db = DatabaseManager(custom_path=self.tmp_db)
+
+    def tearDown(self):
+        if os.path.exists(self.tmp_db):
+            os.remove(self.tmp_db)
+
+    def test_save_and_get_freeze_reports(self):
+        report = SprintFreezeReport(
+            id=0, sprint_id="42", sprint_name="Sprint 42",
+            generated_at=datetime.now(timezone.utc), is_automatic=True,
+            total_tasks=18, promoted_count=11, retained_count=7, pdf_path="/tmp/r.pdf"
+        )
+
+        report_id = self.db.save_freeze_report(report)
+        self.assertGreater(report_id, 0)
+
+        stored = self.db.get_freeze_reports()
+        self.assertEqual(len(stored), 1)
+        self.assertEqual(stored[0].sprint_name, "Sprint 42")
+        self.assertEqual(stored[0].promoted_count, 11)
+        self.assertTrue(stored[0].is_automatic)
+
+    def test_has_automatic_freeze_report(self):
+        self.assertFalse(self.db.has_automatic_freeze_report("42"))
+
+        manual = SprintFreezeReport(
+            id=0, sprint_id="42", sprint_name="Sprint 42",
+            generated_at=datetime.now(timezone.utc), is_automatic=False,
+            total_tasks=1, promoted_count=1, retained_count=0, pdf_path="/tmp/a.pdf"
+        )
+        self.db.save_freeze_report(manual)
+        self.assertFalse(self.db.has_automatic_freeze_report("42"))
+
+        automatic = SprintFreezeReport(
+            id=0, sprint_id="42", sprint_name="Sprint 42",
+            generated_at=datetime.now(timezone.utc), is_automatic=True,
+            total_tasks=1, promoted_count=0, retained_count=1, pdf_path="/tmp/b.pdf"
+        )
+        self.db.save_freeze_report(automatic)
+        self.assertTrue(self.db.has_automatic_freeze_report("42"))
 
 
 if __name__ == "__main__":

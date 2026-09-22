@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Set
 
-from .models import JiraTaskItem, NotificationItem, PullRequestItem
+from .models import JiraTaskItem, NotificationItem, PullRequestItem, SprintFreezeReport
 
 
 class DatabaseManager:
@@ -139,6 +139,20 @@ class DatabaseManager:
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_notifications_dismissed_created
                 ON notifications (is_dismissed, created_at DESC)
+            """)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS freeze_reports (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sprint_id TEXT NOT NULL,
+                    sprint_name TEXT NOT NULL,
+                    generated_at TEXT NOT NULL,
+                    is_automatic INTEGER DEFAULT 0,
+                    total_tasks INTEGER NOT NULL,
+                    promoted_count INTEGER NOT NULL,
+                    retained_count INTEGER NOT NULL,
+                    pdf_path TEXT NOT NULL
+                )
             """)
             conn.commit()
 
@@ -418,3 +432,50 @@ class DatabaseManager:
                 "UPDATE notifications SET is_dismissed = 1 WHERE is_dismissed = 0"
             )
             conn.commit()
+
+    def save_freeze_report(self, report: SprintFreezeReport) -> int:
+        now_iso = report.generated_at.isoformat() if report.generated_at else datetime.now(timezone.utc).isoformat()
+        with self._get_connection() as conn:
+            cursor = conn.execute("""
+                INSERT INTO freeze_reports (
+                    sprint_id, sprint_name, generated_at, is_automatic,
+                    total_tasks, promoted_count, retained_count, pdf_path
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                report.sprint_id,
+                report.sprint_name,
+                now_iso,
+                1 if report.is_automatic else 0,
+                report.total_tasks,
+                report.promoted_count,
+                report.retained_count,
+                report.pdf_path
+            ))
+            conn.commit()
+            return cursor.lastrowid
+
+    def get_freeze_reports(self) -> List[SprintFreezeReport]:
+        items: List[SprintFreezeReport] = []
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT * FROM freeze_reports ORDER BY generated_at DESC")
+            for row in cursor.fetchall():
+                items.append(SprintFreezeReport(
+                    id=row["id"],
+                    sprint_id=row["sprint_id"],
+                    sprint_name=row["sprint_name"],
+                    generated_at=self._parse_iso(row["generated_at"]) or datetime.now(timezone.utc),
+                    is_automatic=bool(row["is_automatic"]),
+                    total_tasks=row["total_tasks"],
+                    promoted_count=row["promoted_count"],
+                    retained_count=row["retained_count"],
+                    pdf_path=row["pdf_path"]
+                ))
+        return items
+
+    def has_automatic_freeze_report(self, sprint_id: str) -> bool:
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT 1 FROM freeze_reports WHERE sprint_id = ? AND is_automatic = 1 LIMIT 1",
+                (str(sprint_id),)
+            )
+            return cursor.fetchone() is not None
