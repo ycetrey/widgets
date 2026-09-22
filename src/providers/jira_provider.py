@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Set
 import requests
 from requests.auth import HTTPBasicAuth
 
-from ..core.models import JiraTaskItem
+from ..core.models import JiraSprintInfo, JiraTaskItem
 from .base import BaseStatusProvider
 
 
@@ -360,3 +360,58 @@ class JiraProvider(BaseStatusProvider):
             "new_items": new_items,
             "errors": []
         }
+
+    def get_active_sprint(self, sample_task_key: str) -> Optional[JiraSprintInfo]:
+        """
+        Descobre a sprint ativa do board correspondente ao projeto de
+        `sample_task_key` (ex: "FF-1234" -> projeto "FF") usando a API Agile
+        do Jira. Retorna None se estiver em modo demo, faltar credenciais,
+        ou não houver board/sprint ativa encontrados.
+        """
+        if self.demo_mode or not (self.jira_url and self.email and self.api_token):
+            return None
+        if not sample_task_key or "-" not in sample_task_key:
+            return None
+
+        project_key = sample_task_key.split("-", 1)[0]
+        headers = {
+            "Accept": "application/json",
+            "User-Agent": "DevStatusWidget-Debian/1.0"
+        }
+        auth = HTTPBasicAuth(self.email, self.api_token)
+
+        try:
+            board_resp = requests.get(
+                f"{self.jira_url}/rest/agile/1.0/board",
+                headers=headers, auth=auth,
+                params={"projectKeyOrId": project_key},
+                timeout=12
+            )
+            if board_resp.status_code != 200:
+                return None
+            boards = board_resp.json().get("values", [])
+            if not boards:
+                return None
+            board_id = boards[0]["id"]
+
+            sprint_resp = requests.get(
+                f"{self.jira_url}/rest/agile/1.0/board/{board_id}/sprint",
+                headers=headers, auth=auth,
+                params={"state": "active"},
+                timeout=12
+            )
+            if sprint_resp.status_code != 200:
+                return None
+            sprints = sprint_resp.json().get("values", [])
+            if not sprints:
+                return None
+
+            sprint = sprints[0]
+            return JiraSprintInfo(
+                id=sprint["id"],
+                name=sprint.get("name", ""),
+                start_date=self._parse_datetime(sprint["startDate"]) if sprint.get("startDate") else None,
+                end_date=self._parse_datetime(sprint["endDate"]) if sprint.get("endDate") else None
+            )
+        except requests.exceptions.RequestException:
+            return None

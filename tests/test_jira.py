@@ -6,7 +6,7 @@ import unittest
 from datetime import datetime, timezone, timedelta
 from unittest.mock import patch, MagicMock
 
-from src.core.models import JiraTaskItem, AppConfig
+from src.core.models import AppConfig, JiraSprintInfo, JiraTaskItem
 from src.core.config import ConfigManager
 from src.providers.jira_provider import JiraProvider
 
@@ -390,6 +390,61 @@ class TestJiraFilteringAndTratativas(unittest.TestCase):
         swimlane_keys = [getattr(s, "parent_key", "") for s in swimlanes if hasattr(s, "parent_key")]
         self.assertIn("FF-474", swimlane_keys)
         self.assertNotIn("FF-617", swimlane_keys)
+
+
+class TestJiraActiveSprint(unittest.TestCase):
+    @patch("requests.get")
+    def test_get_active_sprint_success(self, mock_get):
+        board_resp = MagicMock()
+        board_resp.status_code = 200
+        board_resp.json.return_value = {"values": [{"id": 7, "name": "Board FF"}]}
+
+        sprint_resp = MagicMock()
+        sprint_resp.status_code = 200
+        sprint_resp.json.return_value = {
+            "values": [{
+                "id": 42,
+                "name": "Sprint 42",
+                "startDate": "2026-09-08T13:00:00.000Z",
+                "endDate": "2026-09-22T13:00:00.000Z"
+            }]
+        }
+        mock_get.side_effect = [board_resp, sprint_resp]
+
+        provider = JiraProvider(
+            jira_url="https://empresa.atlassian.net",
+            email="dev@empresa.com",
+            api_token="token123"
+        )
+        sprint = provider.get_active_sprint("FF-1234")
+
+        self.assertIsNotNone(sprint)
+        self.assertEqual(sprint.id, 42)
+        self.assertEqual(sprint.name, "Sprint 42")
+        self.assertEqual(sprint.end_date.day, 22)
+
+    @patch("requests.get")
+    def test_get_active_sprint_no_active_sprint_returns_none(self, mock_get):
+        board_resp = MagicMock()
+        board_resp.status_code = 200
+        board_resp.json.return_value = {"values": [{"id": 7, "name": "Board FF"}]}
+
+        sprint_resp = MagicMock()
+        sprint_resp.status_code = 200
+        sprint_resp.json.return_value = {"values": []}
+        mock_get.side_effect = [board_resp, sprint_resp]
+
+        provider = JiraProvider(
+            jira_url="https://empresa.atlassian.net",
+            email="dev@empresa.com",
+            api_token="token123"
+        )
+        sprint = provider.get_active_sprint("FF-1234")
+        self.assertIsNone(sprint)
+
+    def test_get_active_sprint_demo_mode_returns_none(self):
+        provider = JiraProvider(demo_mode=True)
+        self.assertIsNone(provider.get_active_sprint("FF-1234"))
 
 
 if __name__ == "__main__":
