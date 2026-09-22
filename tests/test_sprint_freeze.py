@@ -212,3 +212,49 @@ class TestFreezeReportCard(unittest.TestCase):
         self.assertEqual(captured, ["/tmp/relatorio.pdf"])
         self.assertIn("11 promovidas", card.summary_label.text())
         self.assertIn("7 retidas", card.summary_label.text())
+
+
+class TestFreezeReportView(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from PyQt6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication(["-platform", "offscreen"])
+
+    def test_set_reports_renders_cards_and_status(self):
+        from src.ui.views.freeze_report_view import FreezeReportView
+        from src.core.models import SprintFreezeReport
+
+        view = FreezeReportView()
+        reports = [
+            SprintFreezeReport(
+                id=1, sprint_id="10", sprint_name="Sprint 42",
+                generated_at=datetime.now(timezone.utc), is_automatic=False,
+                total_tasks=18, promoted_count=11, retained_count=7,
+                pdf_path="/tmp/r.pdf"
+            )
+        ]
+
+        captured = []
+        view.download_requested.connect(lambda path: captured.append(path))
+        view.set_reports(reports)
+
+        self.assertEqual(view.cards_layout.count(), 1)
+        self.assertIn("11 promovidas", view.status_label.text())
+
+    def test_generate_button_emits_signal(self):
+        from src.ui.views.freeze_report_view import FreezeReportView
+
+        view = FreezeReportView()
+        captured = []
+        view.generate_requested.connect(lambda: captured.append(True))
+        view.generate_btn.click()
+        self.assertEqual(captured, [True])
+
+    def test_set_generating_disables_button(self):
+        from src.ui.views.freeze_report_view import FreezeReportView
+
+        view = FreezeReportView()
+        view.set_generating(True)
+        self.assertFalse(view.generate_btn.isEnabled())
+        view.set_generating(False)
+        self.assertTrue(view.generate_btn.isEnabled())
