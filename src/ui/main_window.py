@@ -3,7 +3,7 @@ Janela principal do aplicativo com suporte a abas, bandeja e auto-refresh.
 """
 import os
 import shutil
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 from PyQt6.QtCore import QObject, QThread, QTimer, Qt, pyqtSignal
@@ -25,7 +25,7 @@ from ..core.config import ConfigManager
 from ..core.database import DatabaseManager
 from ..core.models import AppConfig
 from ..core.notifier import DesktopNotifier
-from ..core.sprint_freeze import generate_and_save
+from ..core.sprint_freeze import generate_and_save, should_generate_automatic_report
 from ..core.updater import GitUpdater, UpdateInfo
 from ..providers.github_provider import GitHubProvider
 from ..providers.jira_provider import JiraProvider
@@ -106,7 +106,24 @@ class FreezeReportWorker(QObject):
             self.finished.emit(report, None)
         except Exception as e:
             print(f"[SprintFreeze] Erro ao gerar relatório: {e}")
-            self.finished.emit(None, str(e))
+            self.finished.emit(None, str(e) or repr(e))
+
+
+class AutomaticFreezeCheckWorker(QObject):
+    finished = pyqtSignal(object)  # Optional[JiraSprintInfo]
+
+    def __init__(self, jira_provider, sample_task_key: str):
+        super().__init__()
+        self.jira_provider = jira_provider
+        self.sample_task_key = sample_task_key
+
+    def run(self):
+        try:
+            sprint_info = self.jira_provider.get_active_sprint(self.sample_task_key)
+        except Exception as e:
+            print(f"[SprintFreeze] Erro ao verificar sprint ativa: {e}")
+            sprint_info = None
+        self.finished.emit(sprint_info)
 
 
 class MainWindow(QMainWindow):
@@ -139,6 +156,14 @@ class MainWindow(QMainWindow):
                 demo_mode=False
             )
 
+        self.freeze_jira_provider = JiraProvider(
+            jira_url=self.config.jira_url,
+            email=self.config.jira_email,
+            api_token=self.config.jira_api_token,
+            jql=self.config.jira_jql,
+            demo_mode=False
+        )
+
         base_dir = Path(__file__).resolve().parent.parent.parent
         sound_path = str(base_dir / "assets" / "sounds" / "notification.wav")
         self.notifier = DesktopNotifier(
@@ -165,6 +190,9 @@ class MainWindow(QMainWindow):
         self.freeze_thread: QThread = None
         self.freeze_worker: FreezeReportWorker = None
         self._last_jira_task_keys: list = []
+        self.freeze_check_thread: QThread = None
+        self.freeze_check_worker: AutomaticFreezeCheckWorker = None
+        self.is_checking_automatic_freeze = False
 
         # Timer de auto-refresh
         self.refresh_timer = QTimer(self)
@@ -370,6 +398,14 @@ class MainWindow(QMainWindow):
 
         if hasattr(self.jira_provider, "update_config"):
             self.jira_provider.update_config(
+                jira_url=new_config.jira_url,
+                email=new_config.jira_email,
+                api_token=new_config.jira_api_token,
+                jql=new_config.jira_jql
+            )
+
+        if hasattr(self.freeze_jira_provider, "update_config"):
+            self.freeze_jira_provider.update_config(
                 jira_url=new_config.jira_url,
                 email=new_config.jira_email,
                 api_token=new_config.jira_api_token,
@@ -652,7 +688,7 @@ class MainWindow(QMainWindow):
     def _start_freeze_generation(self, is_automatic: bool):
         self.freeze_thread = QThread()
         self.freeze_worker = FreezeReportWorker(
-            self.jira_provider,
+            self.freeze_jira_provider,
             self.github_provider,
             self.db,
             self.config.freeze_production_branch,
@@ -672,7 +708,7 @@ class MainWindow(QMainWindow):
         self.is_generating_freeze_report = False
         self.freeze_report_view.set_generating(False)
 
-        if error:
+        if error is not None:
             QMessageBox.critical(
                 self, "Erro ao Gerar Relatório",
                 f"Ocorreu um erro ao gerar o relatório de Sprint Freeze:\n\n{error}\n\n"
@@ -715,15 +751,30 @@ class MainWindow(QMainWindow):
     def _check_automatic_freeze_report(self):
         if not (self.config.freeze_reports_enabled and self.config.jira_enabled):
             return
-        if self.is_generating_freeze_report:
+        if self.is_generating_freeze_report or self.is_checking_automatic_freeze:
             return
         if not self._last_jira_task_keys:
             return
+        if date.today().weekday() != 0:
+            return
 
-        from datetime import date
-        from ..core.sprint_freeze import should_generate_automatic_report
+        self.is_checking_automatic_freeze = True
+        self.freeze_check_thread = QThread()
+        self.freeze_check_worker = AutomaticFreezeCheckWorker(
+            self.freeze_jira_provider, self._last_jira_task_keys[0]
+        )
+        self.freeze_check_worker.moveToThread(self.freeze_check_thread)
 
-        sprint_info = self.jira_provider.get_active_sprint(self._last_jira_task_keys[0])
+        self.freeze_check_thread.started.connect(self.freeze_check_worker.run)
+        self.freeze_check_worker.finished.connect(self._on_automatic_freeze_check_completed)
+        self.freeze_check_worker.finished.connect(self.freeze_check_thread.quit)
+        self.freeze_check_worker.finished.connect(self.freeze_check_worker.deleteLater)
+        self.freeze_check_thread.finished.connect(self.freeze_check_thread.deleteLater)
+
+        self.freeze_check_thread.start()
+
+    def _on_automatic_freeze_check_completed(self, sprint_info):
+        self.is_checking_automatic_freeze = False
         if sprint_info is None:
             return
 
