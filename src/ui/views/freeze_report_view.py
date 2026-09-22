@@ -38,7 +38,7 @@ class FreezeReportView(QWidget):
         header_layout.setContentsMargins(14, 10, 14, 10)
         header_layout.setSpacing(10)
 
-        self.title_label = QLabel("🧊 Relatórios de Sprint Freeze")
+        self.title_label = QLabel("🧊 Relatórios de Sprint Freeze (escopo: consulta JQL configurada)")
         self.title_label.setStyleSheet("color: #cdd6f4; font-size: 13px; font-weight: 600;")
         header_layout.addWidget(self.title_label)
 
@@ -99,7 +99,7 @@ class FreezeReportView(QWidget):
                 self.cards_layout.addWidget(card)
             last = reports[0]
             self.status_label.setText(
-                f"Última geração: {last.generated_at.strftime('%d/%m/%Y %H:%M')} — "
+                f"Última geração: {last.generated_at.astimezone().strftime('%d/%m/%Y %H:%M')} — "
                 f"{last.promoted_count} promovidas / {last.retained_count} retidas"
             )
 

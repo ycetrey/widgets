@@ -37,7 +37,7 @@ class FreezeReportCard(QFrame):
         content_layout = QVBoxLayout()
         content_layout.setSpacing(4)
 
-        date_str = self.report.generated_at.strftime("%d/%m/%Y %H:%M")
+        date_str = self.report.generated_at.astimezone().strftime("%d/%m/%Y %H:%M")
         origin = "🤖 Automático" if self.report.is_automatic else "🖱️ Manual"
 
         title_lbl = QLabel(f"🧊 {self.report.sprint_name} — {date_str} ({origin})")

@@ -39,6 +39,7 @@ Controle de notificações, sons, inicialização com o sistema (autostart) e ve
   - **🔀 Pull Requests**: Visualização centralizada das PRs de todos os repositórios configurados do GitHub, ordenadas da mais antiga para a mais recente.
   - **📋 Jira Tarefas**: Visualização das suas tarefas atribuídas no Jira, com status, prioridades, tempo de atualização e link direto para a issue.
   - **🔔 Notificações**: Coluna com histórico de todas as notificações exibidas (ordenadas da mais nova para a mais antiga), com opção de remover item a item [✕] ou botão "Limpar tudo", com persistência garantida no SQLite para não reexibir itens descartados.
+  - **🧊 Freeze**: Geração de relatórios de Sprint Freeze (manual ou automática às segundas-feiras de virada de sprint), cruzando tarefas do Jira com PRs de promoção no GitHub para identificar o que não chegou em produção, com histórico de PDFs gerados.
   - **⚙️ Configurações**: Interface gráfica completa para gerenciar repositórios, token do GitHub, credenciais do Jira, intervalo de atualização e notificações sem precisar editar arquivos manuais.
 - **🚀 Detecção Automática de Atualizações & Auto-Update (`git pull`)**:
   - Detecção inteligente em segundo plano de novos commits no GitHub (`ycetrey/widgets`).
@@ -96,7 +97,7 @@ O script cuidará de:
 1. Instale os pacotes do sistema:
    ```bash
    sudo apt update
-   sudo apt install -y python3 python3-pip python3-pyqt6 python3-requests python3-yaml libnotify-bin gnome-shell-extension-appindicator
+   sudo apt install -y python3 python3-pip python3-pyqt6 python3-requests python3-yaml libnotify-bin gnome-shell-extension-appindicator libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 libcairo2
    ```
 
 2. Execute o aplicativo:
@@ -141,6 +142,13 @@ sort_order: "oldest_first"  # "oldest_first" ou "newest_first"
 notifications_enabled: true
 minimize_to_tray_on_close: true
 autostart: true
+
+# Habilita a aba "🧊 Freeze" e a geração automática de relatório toda
+# segunda-feira em que a sprint ativa já passou da data de término.
+freeze_reports_enabled: false
+
+# Branch de destino que caracteriza uma PR como "promovida para produção"
+freeze_production_branch: "rc-prod"
 ```
 
 ---
