@@ -108,6 +108,25 @@ class TestCoreModels(unittest.TestCase):
         self.assertEqual(pr_open.status_key, "open")
         self.assertEqual(pr_open.status_label, "Aberta")
 
+    def test_sprint_freeze_dataclasses_defaults(self):
+        from src.core.models import SprintFreezeTaskEntry, SprintFreezeReport, JiraSprintInfo
+
+        entry = SprintFreezeTaskEntry(
+            key="FF-1", summary="Tarefa", assignee="Dev", jira_status="A Fazer",
+            html_url="https://jira.com/FF-1", diagnosis="🔨 A Fazer"
+        )
+        self.assertIsNone(entry.pr_url)
+
+        report = SprintFreezeReport(
+            id=0, sprint_id="10", sprint_name="Sprint 42",
+            generated_at=datetime.now(timezone.utc), is_automatic=False,
+            total_tasks=1, promoted_count=0, retained_count=1, pdf_path=""
+        )
+        self.assertEqual(report.retained_tasks, [])
+
+        sprint = JiraSprintInfo(id=10, name="Sprint 42", start_date=None, end_date=None)
+        self.assertEqual(sprint.name, "Sprint 42")
+
 
 class TestConfigManager(unittest.TestCase):
     def test_load_and_save(self):
@@ -132,6 +151,26 @@ class TestConfigManager(unittest.TestCase):
             self.assertEqual(cm2.config.github_token, "test_token_123")
             self.assertEqual(cm2.config.repositories, ["myorg/myrepo"])
             self.assertEqual(cm2.config.refresh_interval_minutes, 10)
+        finally:
+            if os.path.exists(tmp_config_path):
+                os.remove(tmp_config_path)
+
+    def test_freeze_report_config_roundtrip(self):
+        tmp_config_path = "tests_tmp_config_freeze.yaml"
+        if os.path.exists(tmp_config_path):
+            os.remove(tmp_config_path)
+        try:
+            cm = ConfigManager(custom_path=tmp_config_path)
+            self.assertFalse(cm.config.freeze_reports_enabled)
+            self.assertEqual(cm.config.freeze_production_branch, "rc-prod")
+
+            cm.config.freeze_reports_enabled = True
+            cm.config.freeze_production_branch = "main"
+            cm.save()
+
+            cm2 = ConfigManager(custom_path=tmp_config_path)
+            self.assertTrue(cm2.config.freeze_reports_enabled)
+            self.assertEqual(cm2.config.freeze_production_branch, "main")
         finally:
             if os.path.exists(tmp_config_path):
                 os.remove(tmp_config_path)

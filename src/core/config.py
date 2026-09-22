@@ -84,7 +84,9 @@ class ConfigManager:
                 jira_email=str(data.get("jira_email") or "").strip(),
                 jira_api_token=str(data.get("jira_api_token") or "").strip(),
                 jira_jql=resolved_jira_jql,
-                autostart=bool(data.get("autostart", False))
+                autostart=bool(data.get("autostart", False)),
+                freeze_reports_enabled=bool(data.get("freeze_reports_enabled", False)),
+                freeze_production_branch=str(data.get("freeze_production_branch") or "rc-prod").strip()
             )
         except Exception as e:
             print(f"Erro ao carregar configuração ({self._config_file}): {e}. Usando padrões.")
@@ -112,7 +114,9 @@ class ConfigManager:
                 "jira_email": self.config.jira_email,
                 "jira_api_token": self.config.jira_api_token,
                 "jira_jql": self.config.jira_jql,
-                "autostart": self.config.autostart
+                "autostart": self.config.autostart,
+                "freeze_reports_enabled": self.config.freeze_reports_enabled,
+                "freeze_production_branch": self.config.freeze_production_branch
             }
             with open(self._config_file, "w", encoding="utf-8") as f:
                 yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)

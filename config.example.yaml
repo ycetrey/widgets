@@ -56,3 +56,13 @@ jira_api_token: ""
 
 # Consulta JQL para filtrar tarefas da sprint atual atribuídas a você ou não atribuídas
 jira_jql: "sprint in openSprints() AND (assignee = currentUser() OR assignee is EMPTY) AND issuetype not in subtaskIssueTypes() ORDER BY updated DESC"
+
+# ==============================================================================
+# Relatório de Sprint Freeze (Opcional, requer jira_enabled: true)
+# ==============================================================================
+# Habilita a aba "🧊 Freeze" e a geração automática de relatório toda
+# segunda-feira em que a sprint ativa já passou da data de término.
+freeze_reports_enabled: false
+
+# Branch de destino que caracteriza uma PR como "promovida para produção"
+freeze_production_branch: "rc-prod"

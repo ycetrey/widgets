@@ -237,6 +237,14 @@ class JiraTaskItem:
 
 
 @dataclass
+class JiraSprintInfo:
+    id: int
+    name: str
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+
+
+@dataclass
 class AppConfig:
     github_token: str = ""
     github_username: str = ""
@@ -259,6 +267,35 @@ class AppConfig:
 
     # Inicialização Automática no Sistema (Debian/Linux)
     autostart: bool = False
+
+    # Relatório de Sprint Freeze
+    freeze_reports_enabled: bool = False
+    freeze_production_branch: str = "rc-prod"
+
+
+@dataclass
+class SprintFreezeTaskEntry:
+    key: str
+    summary: str
+    assignee: str
+    jira_status: str
+    html_url: str
+    diagnosis: str
+    pr_url: Optional[str] = None
+
+
+@dataclass
+class SprintFreezeReport:
+    id: int
+    sprint_id: str
+    sprint_name: str
+    generated_at: datetime
+    is_automatic: bool
+    total_tasks: int
+    promoted_count: int
+    retained_count: int
+    pdf_path: str
+    retained_tasks: List[SprintFreezeTaskEntry] = field(default_factory=list)
 
 
 @dataclass
