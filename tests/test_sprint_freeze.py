@@ -185,3 +185,30 @@ class TestGenerateAndSave(unittest.TestCase):
         report = generate_and_save(jira_provider, github_provider, self.db, production_branch="rc-prod")
         self.assertIsNone(report)
         jira_provider.get_active_sprint.assert_not_called()
+
+
+class TestFreezeReportCard(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from PyQt6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication(["-platform", "offscreen"])
+
+    def test_card_shows_summary_and_emits_download(self):
+        from src.ui.widgets.freeze_report_card import FreezeReportCard
+        from src.core.models import SprintFreezeReport
+
+        report = SprintFreezeReport(
+            id=1, sprint_id="10", sprint_name="Sprint 42",
+            generated_at=datetime.now(timezone.utc), is_automatic=True,
+            total_tasks=18, promoted_count=11, retained_count=7,
+            pdf_path="/tmp/relatorio.pdf"
+        )
+        card = FreezeReportCard(report)
+
+        captured = []
+        card.download_clicked.connect(lambda path: captured.append(path))
+        card.download_btn.click()
+
+        self.assertEqual(captured, ["/tmp/relatorio.pdf"])
+        self.assertIn("11 promovidas", card.summary_label.text())
+        self.assertIn("7 retidas", card.summary_label.text())
