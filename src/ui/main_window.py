@@ -2,6 +2,7 @@
 Janela principal do aplicativo com suporte a abas, bandeja e auto-refresh.
 """
 import os
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -9,6 +10,7 @@ from PyQt6.QtCore import QObject, QThread, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QCloseEvent, QIcon, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QMainWindow,
@@ -23,11 +25,13 @@ from ..core.config import ConfigManager
 from ..core.database import DatabaseManager
 from ..core.models import AppConfig
 from ..core.notifier import DesktopNotifier
+from ..core.sprint_freeze import generate_and_save
 from ..core.updater import GitUpdater, UpdateInfo
 from ..providers.github_provider import GitHubProvider
 from ..providers.jira_provider import JiraProvider
 from .dock_badge import DockBadgeManager
 from .tray import SystemTrayManager
+from .views.freeze_report_view import FreezeReportView
 from .views.jira_view import JiraView
 from .views.notifications_view import NotificationsView
 from .views.prs_view import PullRequestsView
@@ -73,6 +77,36 @@ class CheckUpdateWorker(QObject):
     def run(self):
         result = self.updater.check_for_updates() if self.updater else None
         self.finished.emit(result)
+
+
+class FreezeReportWorker(QObject):
+    # Emite (report: Optional[SprintFreezeReport], error: Optional[str]).
+    # `error` só é preenchido quando algo realmente falhou (ex: PDF não
+    # renderizou); report=None com error=None significa "sem sprint ativa
+    # ou sem tarefas", um caso normal e silencioso.
+    finished = pyqtSignal(object, object)
+
+    def __init__(self, jira_provider, github_provider, db, production_branch: str, is_automatic: bool = False):
+        super().__init__()
+        self.jira_provider = jira_provider
+        self.github_provider = github_provider
+        self.db = db
+        self.production_branch = production_branch
+        self.is_automatic = is_automatic
+
+    def run(self):
+        try:
+            report = generate_and_save(
+                self.jira_provider,
+                self.github_provider,
+                self.db,
+                self.production_branch,
+                is_automatic=self.is_automatic
+            )
+            self.finished.emit(report, None)
+        except Exception as e:
+            print(f"[SprintFreeze] Erro ao gerar relatório: {e}")
+            self.finished.emit(None, str(e))
 
 
 class MainWindow(QMainWindow):
@@ -126,6 +160,12 @@ class MainWindow(QMainWindow):
         self.worker: FetchWorker = None
         self.is_fetching = False
 
+        # Relatório de Sprint Freeze
+        self.is_generating_freeze_report = False
+        self.freeze_thread: QThread = None
+        self.freeze_worker: FreezeReportWorker = None
+        self._last_jira_task_keys: list = []
+
         # Timer de auto-refresh
         self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self.start_fetch)
@@ -162,6 +202,7 @@ class MainWindow(QMainWindow):
                     self.tab_jira.set_count(len(cached_jira))
 
             self._reload_notifications()
+            self.freeze_report_view.set_reports(self.db.get_freeze_reports())
         except Exception as e:
             print(f"[Database] Erro ao carregar dados do cache inicial: {e}")
 
@@ -213,6 +254,13 @@ class MainWindow(QMainWindow):
         self.tab_settings.clicked.connect(lambda: self._switch_tab(3))
         tab_layout.addWidget(self.tab_settings)
 
+        # Aba 4: Relatórios de Sprint Freeze
+        self.tab_freeze = NavTabButton("🧊 Freeze", count=0)
+        self.tab_freeze.set_active(False)
+        self.tab_freeze.clicked.connect(lambda: self._switch_tab(4))
+        self.tab_freeze.setVisible(self.config.freeze_reports_enabled and self.config.jira_enabled)
+        tab_layout.addWidget(self.tab_freeze)
+
         tab_layout.addStretch()
         main_layout.addWidget(tab_frame)
 
@@ -254,6 +302,12 @@ class MainWindow(QMainWindow):
         self.settings_view.update_app_requested.connect(self.prompt_and_perform_update)
         self.stack.addWidget(self.settings_view)
 
+        # View 4: Relatórios de Sprint Freeze
+        self.freeze_report_view = FreezeReportView()
+        self.freeze_report_view.generate_requested.connect(self._on_generate_freeze_report)
+        self.freeze_report_view.download_requested.connect(self._on_download_freeze_report)
+        self.stack.addWidget(self.freeze_report_view)
+
         main_layout.addWidget(self.stack, stretch=1)
 
         # 3. Barra de Status Inferior
@@ -282,6 +336,7 @@ class MainWindow(QMainWindow):
         self.tab_jira.set_active(index == 1)
         self.tab_notifications.set_active(index == 2)
         self.tab_settings.set_active(index == 3)
+        self.tab_freeze.set_active(index == 4)
 
     def _start_timer(self):
         interval_ms = max(1, self.config.refresh_interval_minutes) * 60 * 1000
@@ -317,6 +372,7 @@ class MainWindow(QMainWindow):
             )
 
         self.tab_jira.setVisible(new_config.jira_enabled)
+        self.tab_freeze.setVisible(new_config.freeze_reports_enabled and new_config.jira_enabled)
         if not new_config.jira_enabled and self.stack.currentIndex() == 1:
             self._switch_tab(0)
 
@@ -433,6 +489,7 @@ class MainWindow(QMainWindow):
         # 2. Atualiza visualização do Jira
         jira_user = jira_res.get("current_user_name")
         self.jira_view.update_tasks(jira_items, current_user_name=jira_user)
+        self._last_jira_task_keys = [t.key for t in jira_items if not t.is_subtask]
         self.tab_jira.set_count(len(jira_items))
         if jira_errors:
             self.jira_view.set_error_message(" | ".join(jira_errors))
@@ -572,6 +629,83 @@ class MainWindow(QMainWindow):
             f"Repositório: ycetrey/widgets (branch: {self._current_update_info.branch})\n\n"
             f"Commits disponíveis:\n{commits_formatted}"
         )
+
+    def _on_generate_freeze_report(self):
+        if self.is_generating_freeze_report:
+            return
+        if not self.config.jira_enabled:
+            self.status_bar.showMessage(
+                "Habilite a integração com o Jira nas Configurações antes de gerar o relatório de freeze.", 5000
+            )
+            return
+
+        self.is_generating_freeze_report = True
+        self.freeze_report_view.set_generating(True)
+        self.status_bar.showMessage("Gerando relatório de Sprint Freeze...")
+        self._start_freeze_generation(is_automatic=False)
+
+    def _start_freeze_generation(self, is_automatic: bool):
+        self.freeze_thread = QThread()
+        self.freeze_worker = FreezeReportWorker(
+            self.jira_provider,
+            self.github_provider,
+            self.db,
+            self.config.freeze_production_branch,
+            is_automatic=is_automatic
+        )
+        self.freeze_worker.moveToThread(self.freeze_thread)
+
+        self.freeze_thread.started.connect(self.freeze_worker.run)
+        self.freeze_worker.finished.connect(self._on_freeze_report_generated)
+        self.freeze_worker.finished.connect(self.freeze_thread.quit)
+        self.freeze_worker.finished.connect(self.freeze_worker.deleteLater)
+        self.freeze_thread.finished.connect(self.freeze_thread.deleteLater)
+
+        self.freeze_thread.start()
+
+    def _on_freeze_report_generated(self, report, error):
+        self.is_generating_freeze_report = False
+        self.freeze_report_view.set_generating(False)
+
+        if error:
+            QMessageBox.critical(
+                self, "Erro ao Gerar Relatório",
+                f"Ocorreu um erro ao gerar o relatório de Sprint Freeze:\n\n{error}\n\n"
+                "Se o erro mencionar bibliotecas do WeasyPrint, rode o install.sh novamente."
+            )
+            self.status_bar.showMessage("Erro ao gerar relatório de Sprint Freeze.", 5000)
+            return
+
+        if report is None:
+            self.status_bar.showMessage(
+                "Não foi possível gerar o relatório: nenhuma sprint ativa encontrada.", 5000
+            )
+            return
+
+        self.freeze_report_view.set_reports(self.db.get_freeze_reports())
+        self.status_bar.showMessage(
+            f"Relatório de Freeze gerado: {report.promoted_count} promovidas / {report.retained_count} retidas.",
+            5000
+        )
+
+    def _on_download_freeze_report(self, pdf_path: str):
+        if not pdf_path or not os.path.exists(pdf_path):
+            QMessageBox.warning(
+                self, "Arquivo não encontrado",
+                "O arquivo PDF deste relatório não foi encontrado no disco."
+            )
+            return
+
+        suggested_name = os.path.basename(pdf_path)
+        dest_path, _ = QFileDialog.getSaveFileName(
+            self, "Salvar Relatório de Freeze", suggested_name, "PDF (*.pdf)"
+        )
+        if dest_path:
+            try:
+                shutil.copyfile(pdf_path, dest_path)
+                self.status_bar.showMessage(f"Relatório salvo em {dest_path}", 4000)
+            except Exception as e:
+                QMessageBox.critical(self, "Erro ao salvar", f"Não foi possível salvar o arquivo:\n{e}")
 
     def prompt_and_perform_update(self):
         """Solicita confirmação e executa o git pull e reinicialização do aplicativo."""
