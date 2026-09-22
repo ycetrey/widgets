@@ -3,6 +3,7 @@ Testes automatizados para o Dev Status Widget.
 """
 import os
 import unittest
+import requests
 from datetime import datetime, timezone, timedelta
 from unittest.mock import patch, MagicMock
 
@@ -283,6 +284,45 @@ class TestGitHubProviderPromotionSearch(unittest.TestCase):
         error_resp = MagicMock()
         error_resp.status_code = 403
         mock_get.return_value = error_resp
+
+        provider = GitHubProvider(repositories=["org/repo"])
+        result, had_error = provider.search_promotion_prs(["FF-100"], "rc-prod")
+
+        self.assertEqual(result, {})
+        self.assertTrue(had_error)
+
+    @patch("requests.get")
+    def test_search_promotion_prs_merged_wins_tiebreak(self, mock_get):
+        """Test that when same key appears twice (open then merged), merged PR wins."""
+        search_resp = MagicMock()
+        search_resp.status_code = 200
+        search_resp.json.return_value = {
+            "items": [
+                {
+                    "title": "promote(FF-100): rc-prod",
+                    "html_url": "https://github.com/org/repo/pull/10",
+                    "pull_request": {"merged_at": None}  # Open PR first
+                },
+                {
+                    "title": "promote(FF-100): rc-prod",
+                    "html_url": "https://github.com/org/repo/pull/11",
+                    "pull_request": {"merged_at": "2026-09-20T10:00:00Z"}  # Merged PR second
+                }
+            ]
+        }
+        mock_get.return_value = search_resp
+
+        provider = GitHubProvider(repositories=["org/repo"])
+        result, had_error = provider.search_promotion_prs(["FF-100"], "rc-prod")
+
+        self.assertFalse(had_error)
+        self.assertTrue(result["FF-100"]["merged"])
+        self.assertEqual(result["FF-100"]["pr_url"], "https://github.com/org/repo/pull/11")
+
+    @patch("requests.get")
+    def test_search_promotion_prs_handles_network_exception(self, mock_get):
+        """Test that RequestException is caught and had_error is set without raising."""
+        mock_get.side_effect = requests.exceptions.RequestException("network down")
 
         provider = GitHubProvider(repositories=["org/repo"])
         result, had_error = provider.search_promotion_prs(["FF-100"], "rc-prod")
