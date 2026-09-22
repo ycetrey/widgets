@@ -25,3 +25,6 @@ Thumbs.db
 .idea/
 *.log
 Pasted image*.png
+
+# Documentação local / especificações internas
+docs/
