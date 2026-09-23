@@ -174,6 +174,38 @@ class TestFreezeReportsDatabase(unittest.TestCase):
         self.db.save_freeze_report(automatic)
         self.assertTrue(self.db.has_automatic_freeze_report("42"))
 
+    def test_delete_freeze_report(self):
+        report = SprintFreezeReport(
+            id=0, sprint_id="42", sprint_name="Sprint 42",
+            generated_at=datetime.now(timezone.utc), is_automatic=False,
+            total_tasks=5, promoted_count=3, retained_count=2, pdf_path="/tmp/test_del.pdf"
+        )
+        report_id = self.db.save_freeze_report(report)
+        self.assertEqual(len(self.db.get_freeze_reports()), 1)
+
+        pdf_path = self.db.delete_freeze_report(report_id)
+        self.assertEqual(pdf_path, "/tmp/test_del.pdf")
+        self.assertEqual(len(self.db.get_freeze_reports()), 0)
+
+    def test_delete_all_freeze_reports(self):
+        r1 = SprintFreezeReport(
+            id=0, sprint_id="42", sprint_name="Sprint 42",
+            generated_at=datetime.now(timezone.utc), is_automatic=False,
+            total_tasks=5, promoted_count=3, retained_count=2, pdf_path="/tmp/r1.pdf"
+        )
+        r2 = SprintFreezeReport(
+            id=0, sprint_id="43", sprint_name="Sprint 43",
+            generated_at=datetime.now(timezone.utc), is_automatic=True,
+            total_tasks=8, promoted_count=6, retained_count=2, pdf_path="/tmp/r2.pdf"
+        )
+        self.db.save_freeze_report(r1)
+        self.db.save_freeze_report(r2)
+        self.assertEqual(len(self.db.get_freeze_reports()), 2)
+
+        paths = self.db.delete_all_freeze_reports()
+        self.assertEqual(set(paths), {"/tmp/r1.pdf", "/tmp/r2.pdf"})
+        self.assertEqual(len(self.db.get_freeze_reports()), 0)
+
     def test_database_path_resolution_windows(self):
         import tempfile
         from unittest.mock import patch

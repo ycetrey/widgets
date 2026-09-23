@@ -486,3 +486,22 @@ class DatabaseManager:
                 (str(sprint_id),)
             )
             return cursor.fetchone() is not None
+
+    def delete_freeze_report(self, report_id: int) -> Optional[str]:
+        """Remove um relatório de Sprint Freeze pelo ID e retorna o pdf_path associado."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT pdf_path FROM freeze_reports WHERE id = ?", (report_id,))
+            row = cursor.fetchone()
+            pdf_path = row["pdf_path"] if row else None
+            conn.execute("DELETE FROM freeze_reports WHERE id = ?", (report_id,))
+            conn.commit()
+            return pdf_path
+
+    def delete_all_freeze_reports(self) -> List[str]:
+        """Remove todos os relatórios de Sprint Freeze e retorna a lista dos caminhos de PDFs."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT pdf_path FROM freeze_reports")
+            paths = [row["pdf_path"] for row in cursor.fetchall() if row["pdf_path"]]
+            conn.execute("DELETE FROM freeze_reports")
+            conn.commit()
+            return paths

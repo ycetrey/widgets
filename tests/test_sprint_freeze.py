@@ -297,3 +297,48 @@ class TestFreezeReportView(unittest.TestCase):
 
         # Assert only 2 cards exist (not 1+2=3)
         self.assertEqual(view.cards_layout.count(), 2)
+
+    def test_card_delete_button_forwards_signal(self):
+        from src.ui.views.freeze_report_view import FreezeReportView
+        from src.core.models import SprintFreezeReport
+
+        view = FreezeReportView()
+        captured = []
+        view.delete_one_requested.connect(lambda rep_id: captured.append(rep_id))
+
+        report = SprintFreezeReport(
+            id=42, sprint_id="10", sprint_name="Sprint 42",
+            generated_at=datetime.now(timezone.utc), is_automatic=False,
+            total_tasks=10, promoted_count=8, retained_count=2,
+            pdf_path="/tmp/r42.pdf"
+        )
+        view.set_reports([report])
+        card = view.cards_layout.itemAt(0).widget()
+        card.delete_btn.click()
+        self.assertEqual(captured, [42])
+
+    def test_clear_all_button_state_and_signal(self):
+        from src.ui.views.freeze_report_view import FreezeReportView
+        from src.core.models import SprintFreezeReport
+
+        view = FreezeReportView()
+        self.assertFalse(view.clear_all_btn.isEnabled())
+
+        captured = []
+        view.clear_all_requested.connect(lambda: captured.append(True))
+
+        report = SprintFreezeReport(
+            id=1, sprint_id="10", sprint_name="Sprint 42",
+            generated_at=datetime.now(timezone.utc), is_automatic=False,
+            total_tasks=10, promoted_count=8, retained_count=2,
+            pdf_path="/tmp/r1.pdf"
+        )
+        view.set_reports([report])
+        self.assertTrue(view.clear_all_btn.isEnabled())
+
+        view.clear_all_btn.click()
+        self.assertEqual(captured, [True])
+
+        # Se limpar lista, deve desabilitar o botão
+        view.set_reports([])
+        self.assertFalse(view.clear_all_btn.isEnabled())

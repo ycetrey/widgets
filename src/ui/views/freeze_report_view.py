@@ -21,6 +21,8 @@ from ..widgets.freeze_report_card import FreezeReportCard
 class FreezeReportView(QWidget):
     generate_requested = pyqtSignal()
     download_requested = pyqtSignal(str)
+    delete_one_requested = pyqtSignal(int)
+    clear_all_requested = pyqtSignal()
 
     def __init__(self, parent: QWidget = None):
         super().__init__(parent)
@@ -47,6 +49,14 @@ class FreezeReportView(QWidget):
         header_layout.addWidget(self.status_label)
 
         header_layout.addStretch()
+
+        self.clear_all_btn = QPushButton("🗑️ Limpar Relatórios")
+        self.clear_all_btn.setToolTip("Remover todos os relatórios de Sprint Freeze gerados")
+        self.clear_all_btn.setProperty("class", "actionButton")
+        self.clear_all_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.clear_all_btn.setEnabled(False)
+        self.clear_all_btn.clicked.connect(self.clear_all_requested.emit)
+        header_layout.addWidget(self.clear_all_btn)
 
         self.generate_btn = QPushButton("🧊 Gerar Relatório Agora")
         self.generate_btn.setProperty("class", "primaryButton")
@@ -77,6 +87,7 @@ class FreezeReportView(QWidget):
 
     def set_reports(self, reports: List[SprintFreezeReport]):
         self.reports = reports
+        self.clear_all_btn.setEnabled(len(reports) > 0)
 
         while self.cards_layout.count() > 0:
             item = self.cards_layout.takeAt(0)
@@ -96,6 +107,7 @@ class FreezeReportView(QWidget):
             for report in reports:
                 card = FreezeReportCard(report, parent=self.container)
                 card.download_clicked.connect(self.download_requested.emit)
+                card.delete_clicked.connect(self.delete_one_requested.emit)
                 self.cards_layout.addWidget(card)
             last = reports[0]
             self.status_label.setText(
@@ -106,3 +118,7 @@ class FreezeReportView(QWidget):
     def set_generating(self, generating: bool):
         self.generate_btn.setEnabled(not generating)
         self.generate_btn.setText("⏳ Gerando..." if generating else "🧊 Gerar Relatório Agora")
+        if generating:
+            self.clear_all_btn.setEnabled(False)
+        else:
+            self.clear_all_btn.setEnabled(len(self.reports) > 0)

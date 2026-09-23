@@ -340,6 +340,8 @@ class MainWindow(QMainWindow):
         self.freeze_report_view = FreezeReportView()
         self.freeze_report_view.generate_requested.connect(self._on_generate_freeze_report)
         self.freeze_report_view.download_requested.connect(self._on_download_freeze_report)
+        self.freeze_report_view.delete_one_requested.connect(self._on_delete_freeze_report)
+        self.freeze_report_view.clear_all_requested.connect(self._on_clear_all_freeze_reports)
         self.stack.addWidget(self.freeze_report_view)
 
         main_layout.addWidget(self.stack, stretch=1)
@@ -750,6 +752,64 @@ class MainWindow(QMainWindow):
                 self.status_bar.showMessage(f"Relatório salvo em {dest_path}", 4000)
             except Exception as e:
                 QMessageBox.critical(self, "Erro ao salvar", f"Não foi possível salvar o arquivo:\n{e}")
+
+    def _on_delete_freeze_report(self, report_id: int):
+        if not getattr(self.config, "skip_permissions", False):
+            reply = QMessageBox.question(
+                self,
+                "Remover Relatório",
+                "Tem certeza que deseja remover este relatório de Sprint Freeze?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+        try:
+            pdf_path = self.db.delete_freeze_report(report_id)
+            if pdf_path and os.path.exists(pdf_path):
+                try:
+                    os.remove(pdf_path)
+                except Exception as e:
+                    print(f"[SprintFreeze] Erro ao remover arquivo PDF {pdf_path}: {e}")
+
+            self.freeze_report_view.set_reports(self.db.get_freeze_reports())
+            self.status_bar.showMessage("Relatório de Sprint Freeze removido.", 2500)
+        except Exception as e:
+            print(f"[Database] Erro ao remover relatório de freeze: {e}")
+            QMessageBox.critical(self, "Erro ao remover", f"Não foi possível remover o relatório:\n{e}")
+
+    def _on_clear_all_freeze_reports(self):
+        reports = self.db.get_freeze_reports()
+        if not reports:
+            return
+
+        if not getattr(self.config, "skip_permissions", False):
+            count_str = f"todos os {len(reports)}" if len(reports) > 1 else "o"
+            reply = QMessageBox.question(
+                self,
+                "Limpar Relatórios",
+                f"Tem certeza que deseja remover {count_str} relatório(s) de Sprint Freeze?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+        try:
+            pdf_paths = self.db.delete_all_freeze_reports()
+            for path in pdf_paths:
+                if path and os.path.exists(path):
+                    try:
+                        os.remove(path)
+                    except Exception as e:
+                        print(f"[SprintFreeze] Erro ao remover arquivo PDF {path}: {e}")
+
+            self.freeze_report_view.set_reports([])
+            self.status_bar.showMessage("Todos os relatórios de Sprint Freeze foram removidos.", 2500)
+        except Exception as e:
+            print(f"[Database] Erro ao limpar relatórios de freeze: {e}")
+            QMessageBox.critical(self, "Erro ao limpar", f"Não foi possível limpar os relatórios:\n{e}")
 
     def _check_automatic_freeze_report(self):
         if not (self.config.freeze_reports_enabled and self.config.jira_enabled):

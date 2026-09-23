@@ -10,6 +10,7 @@ from ...core.models import SprintFreezeReport
 
 class FreezeReportCard(QFrame):
     download_clicked = pyqtSignal(str)
+    delete_clicked = pyqtSignal(int)
 
     def __init__(self, report: SprintFreezeReport, parent: QWidget = None):
         super().__init__(parent)
@@ -53,8 +54,21 @@ class FreezeReportCard(QFrame):
 
         main_layout.addLayout(content_layout, stretch=1)
 
+        actions_layout = QHBoxLayout()
+        actions_layout.setSpacing(6)
+
         self.download_btn = QPushButton("⬇️ Baixar PDF")
         self.download_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.download_btn.setProperty("class", "actionButton")
         self.download_btn.clicked.connect(lambda: self.download_clicked.emit(self.report.pdf_path))
-        main_layout.addWidget(self.download_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        actions_layout.addWidget(self.download_btn)
+
+        self.delete_btn = QPushButton("🗑️")
+        self.delete_btn.setToolTip("Remover este relatório")
+        self.delete_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.delete_btn.setProperty("class", "actionButton")
+        self.delete_btn.setFixedWidth(36)
+        self.delete_btn.clicked.connect(lambda: self.delete_clicked.emit(self.report.id))
+        actions_layout.addWidget(self.delete_btn)
+
+        main_layout.addLayout(actions_layout, 0)
